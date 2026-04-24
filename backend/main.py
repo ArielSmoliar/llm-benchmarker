@@ -116,6 +116,12 @@ async def call_model(
                 error="Authentication failed — check your NVIDIA_API_KEY.",
                 latency_ms=elapsed_ms,
             )
+        if resp.status_code == 404:
+            return ModelResult(
+                model_id=model_id,
+                error="Model not available on your account.",
+                latency_ms=elapsed_ms,
+            )
         if resp.status_code == 422:
             return ModelResult(
                 model_id=model_id,

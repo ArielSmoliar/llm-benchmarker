@@ -1,4 +1,6 @@
 import { useState } from 'react'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 
 export default function ResultCard({ result }) {
   const [copied, setCopied] = useState(false)
@@ -92,9 +94,11 @@ export default function ResultCard({ result }) {
             <span className="text-sm leading-relaxed">{result.error}</span>
           </div>
         ) : (
-          <p className="text-sm text-gray-300 whitespace-pre-wrap leading-relaxed">
-            {result.content}
-          </p>
+          <div className="prose-sm prose-invert prose-p:text-gray-300 prose-headings:text-white prose-headings:font-semibold prose-strong:text-gray-200 prose-code:text-purple-300 prose-code:bg-[#0f0f17] prose-code:px-1 prose-code:rounded prose-pre:bg-[#0f0f17] prose-pre:border prose-pre:border-[#1e1e2e] prose-ol:text-gray-300 prose-ul:text-gray-300 prose-li:text-gray-300 max-w-none text-sm leading-relaxed">
+            <ReactMarkdown remarkPlugins={[remarkGfm]}>
+              {result.content}
+            </ReactMarkdown>
+          </div>
         )}
       </div>
     </div>
