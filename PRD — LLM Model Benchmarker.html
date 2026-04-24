@@ -1,0 +1,997 @@
+<!DOCTYPE html>
+<!-- saved from url=(0063)file:///Users/arielsmoliar/Downloads/prd-llm-benchmarker_1.html -->
+<html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PRD — LLM Model Benchmarker</title>
+<link href="./PRD — LLM Model Benchmarker_files/css2" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0a0f;
+    --surface: #13131a;
+    --border: #1e1e2e;
+    --accent: #7c6af7;
+    --accent-dim: #3d3680;
+    --accent-glow: rgba(124, 106, 247, 0.15);
+    --green: #4ade80;
+    --amber: #fbbf24;
+    --red: #f87171;
+    --text: #e8e8f0;
+    --muted: #6b6b8a;
+    --tag-bg: #1a1a2e;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'DM Sans', sans-serif;
+    font-size: 15px;
+    line-height: 1.7;
+    min-height: 100vh;
+  }
+
+  /* Subtle grid background */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(124,106,247,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(124,106,247,0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .page {
+    position: relative;
+    z-index: 1;
+    max-width: 860px;
+    margin: 0 auto;
+    padding: 60px 40px 100px;
+  }
+
+  /* ── Header ── */
+  .header {
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 40px;
+    margin-bottom: 52px;
+  }
+
+  .doc-type {
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 20px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .doc-type::before {
+    content: '';
+    display: inline-block;
+    width: 24px;
+    height: 1px;
+    background: var(--accent);
+  }
+
+  h1 {
+    font-family: 'Syne', sans-serif;
+    font-size: 42px;
+    font-weight: 800;
+    line-height: 1.1;
+    letter-spacing: -0.02em;
+    margin-bottom: 16px;
+    background: linear-gradient(135deg, #e8e8f0 0%, #9990e0 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .subtitle {
+    color: var(--muted);
+    font-size: 16px;
+    font-weight: 300;
+    margin-bottom: 28px;
+    max-width: 560px;
+  }
+
+  .meta-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .tag {
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    padding: 4px 10px;
+    border-radius: 4px;
+    background: var(--tag-bg);
+    border: 1px solid var(--border);
+    color: var(--muted);
+  }
+
+  .tag.status {
+    background: rgba(74, 222, 128, 0.08);
+    border-color: rgba(74, 222, 128, 0.25);
+    color: var(--green);
+  }
+
+  /* ── Section ── */
+  section {
+    margin-bottom: 52px;
+  }
+
+  .section-label {
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 20px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .section-label::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: linear-gradient(90deg, var(--accent-dim), transparent);
+  }
+
+  h2 {
+    font-family: 'Syne', sans-serif;
+    font-size: 22px;
+    font-weight: 700;
+    margin-bottom: 14px;
+    color: var(--text);
+  }
+
+  p {
+    color: #c0c0d8;
+    font-weight: 300;
+    margin-bottom: 12px;
+  }
+
+  p:last-child { margin-bottom: 0; }
+
+  /* ── Problem / Opportunity cards ── */
+  .two-col {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-top: 4px;
+  }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 20px 22px;
+  }
+
+  .card-label {
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    margin-bottom: 8px;
+  }
+
+  .card-label.problem { color: var(--red); }
+  .card-label.opportunity { color: var(--green); }
+
+  .card p {
+    font-size: 14px;
+    margin-bottom: 0;
+  }
+
+  /* ── Users ── */
+  .user-row {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 12px;
+    align-items: flex-start;
+  }
+
+  .user-icon {
+    width: 36px;
+    height: 36px;
+    border-radius: 8px;
+    background: var(--accent-glow);
+    border: 1px solid var(--accent-dim);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+    flex-shrink: 0;
+    margin-top: 2px;
+  }
+
+  .user-name {
+    font-family: 'Syne', sans-serif;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text);
+    margin-bottom: 3px;
+  }
+
+  .user-desc {
+    font-size: 13px;
+    color: var(--muted);
+    font-weight: 300;
+  }
+
+  /* ── Feature table ── */
+  .feature-grid {
+    display: grid;
+    gap: 2px;
+  }
+
+  .feature-row {
+    display: grid;
+    grid-template-columns: 28px 1fr 90px 90px;
+    gap: 12px;
+    padding: 14px 16px;
+    border-radius: 8px;
+    align-items: center;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    transition: border-color 0.15s;
+  }
+
+  .feature-row:hover {
+    border-color: var(--accent-dim);
+  }
+
+  .feature-row.header-row {
+    background: transparent;
+    border-color: transparent;
+    padding-bottom: 6px;
+  }
+
+  .feature-row.header-row span {
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+
+  .feat-num {
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    color: var(--muted);
+  }
+
+  .feat-name {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text);
+  }
+
+  .feat-desc {
+    font-size: 12px;
+    color: var(--muted);
+    font-weight: 300;
+    margin-top: 2px;
+  }
+
+  .phase-badge {
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    padding: 3px 8px;
+    border-radius: 4px;
+    text-align: center;
+    width: fit-content;
+  }
+
+  .phase-1 { background: rgba(74,222,128,0.1); color: var(--green); border: 1px solid rgba(74,222,128,0.25); }
+  .phase-2 { background: rgba(251,191,36,0.1); color: var(--amber); border: 1px solid rgba(251,191,36,0.25); }
+  .phase-3 { background: rgba(248,113,113,0.1); color: var(--red); border: 1px solid rgba(248,113,113,0.25); }
+
+  .priority-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    margin: auto;
+  }
+
+  .p-high { background: var(--green); box-shadow: 0 0 6px rgba(74,222,128,0.5); }
+  .p-med  { background: var(--amber); }
+  .p-low  { background: var(--muted); }
+
+  /* ── Tech stack ── */
+  .stack-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+  }
+
+  .stack-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 18px 20px;
+  }
+
+  .stack-layer {
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 10px;
+  }
+
+  .stack-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text);
+    margin-bottom: 6px;
+  }
+
+  .stack-item::before {
+    content: '▸';
+    color: var(--accent);
+    font-size: 10px;
+  }
+
+  .stack-why {
+    font-size: 12px;
+    color: var(--muted);
+    font-weight: 300;
+    margin-top: 2px;
+    padding-left: 16px;
+  }
+
+  /* ── Metrics ── */
+  .metrics-row {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+  }
+
+  .metric-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 20px;
+    text-align: center;
+  }
+
+  .metric-value {
+    font-family: 'Syne', sans-serif;
+    font-size: 28px;
+    font-weight: 800;
+    color: var(--accent);
+    margin-bottom: 4px;
+  }
+
+  .metric-label {
+    font-size: 12px;
+    color: var(--muted);
+    font-weight: 300;
+  }
+
+  /* ── Phases timeline ── */
+  .timeline {
+    position: relative;
+    padding-left: 28px;
+  }
+
+  .timeline::before {
+    content: '';
+    position: absolute;
+    left: 7px;
+    top: 8px;
+    bottom: 8px;
+    width: 1px;
+    background: linear-gradient(180deg, var(--accent), var(--accent-dim), transparent);
+  }
+
+  .tl-item {
+    position: relative;
+    margin-bottom: 32px;
+  }
+
+  .tl-item:last-child { margin-bottom: 0; }
+
+  .tl-dot {
+    position: absolute;
+    left: -24px;
+    top: 6px;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    border: 2px solid var(--accent);
+    background: var(--bg);
+  }
+
+  .tl-dot.filled {
+    background: var(--accent);
+    box-shadow: 0 0 10px var(--accent);
+  }
+
+  .tl-phase {
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    margin-bottom: 6px;
+  }
+
+  .tl-phase.p1 { color: var(--green); }
+  .tl-phase.p2 { color: var(--amber); }
+  .tl-phase.p3 { color: var(--red); }
+
+  .tl-title {
+    font-family: 'Syne', sans-serif;
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--text);
+    margin-bottom: 8px;
+  }
+
+  .tl-items {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .tl-items li {
+    font-size: 13px;
+    color: var(--muted);
+    font-weight: 300;
+    padding-left: 14px;
+    position: relative;
+  }
+
+  .tl-items li::before {
+    content: '—';
+    position: absolute;
+    left: 0;
+    color: var(--border);
+  }
+
+  /* ── Footer ── */
+  .doc-footer {
+    margin-top: 80px;
+    padding-top: 24px;
+    border-top: 1px solid var(--border);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .doc-footer span {
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    color: var(--muted);
+  }
+
+  /* ── Non-goals callout ── */
+  .callout {
+    background: rgba(124,106,247,0.06);
+    border: 1px solid var(--accent-dim);
+    border-radius: 10px;
+    padding: 18px 22px;
+    margin-top: 4px;
+  }
+
+  .callout p {
+    font-size: 13px;
+    color: #9990d8;
+    margin-bottom: 6px;
+  }
+
+  .callout p:last-child { margin-bottom: 0; }
+
+  .callout p::before {
+    content: '✗ ';
+    color: var(--muted);
+    font-family: 'DM Mono', monospace;
+  }
+
+  @media (max-width: 640px) {
+    .page { padding: 32px 20px 60px; }
+    h1 { font-size: 28px; }
+    .two-col, .stack-grid, .metrics-row { grid-template-columns: 1fr; }
+    .feature-row { grid-template-columns: 24px 1fr; }
+    .feature-row .phase-badge, .feature-row .priority-dot { display: none; }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <!-- Header -->
+  <header class="header">
+    <div class="doc-type">Product Requirements Document</div>
+    <h1>LLM Model<br>Benchmarker</h1>
+    <p class="subtitle">A no-code tool for comparing AI model outputs side-by-side — built for product teams who want to spend more time building AI products, less time wiring up APIs.</p>
+    <div class="meta-row">
+      <span class="tag status">Draft</span>
+      <span class="tag">v0.2</span>
+      <span class="tag">April 2026</span>
+      <span class="tag">Open Source · GitHub</span>
+      <span class="tag">Self-hosted · Docker</span>
+    </div>
+  </header>
+
+  <!-- Problem & Opportunity -->
+  <section>
+    <div class="section-label">01 — Context</div>
+    <h2>Problem &amp; Opportunity</h2>
+    <div class="two-col">
+      <div class="card">
+        <div class="card-label problem">Problem</div>
+        <p>Choosing between LLMs today requires running manual experiments across different SDKs, API formats, and dashboards. There's no fast, frictionless way to compare model outputs, latency, and quality in one place.</p>
+      </div>
+      <div class="card">
+        <div class="card-label opportunity">Opportunity</div>
+        <p>NVIDIA now hosts ~80 open-source models behind a single OpenAI-compatible API — for free. This collapses the switching cost to a single endpoint change, making a model benchmarker both easy to build and genuinely useful.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- Target Users -->
+  <section>
+    <div class="section-label">02 — Audience</div>
+    <h2>AI Product Builders</h2>
+
+    <div class="user-row">
+      <div class="user-icon">📋</div>
+      <div>
+        <div class="user-name">Product managers</div>
+        <div class="user-desc">Deciding which model to ship in a feature without depending on engineering. Need clear output quality and latency signals, not code.</div>
+      </div>
+    </div>
+    <div class="user-row">
+      <div class="user-icon">🎨</div>
+      <div>
+        <div class="user-name">Designers &amp; content strategists</div>
+        <div class="user-desc">Evaluating tone, style, and output quality across models for copywriting, UX writing, or generative content features. Care about feel, not benchmarks.</div>
+      </div>
+    </div>
+    <div class="user-row">
+      <div class="user-icon">📊</div>
+      <div>
+        <div class="user-name">Data scientists &amp; analysts</div>
+        <div class="user-desc">Running structured comparisons across prompts and models to inform team decisions. Want exportable results without building eval pipelines from scratch.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Goals -->
+  <section>
+    <div class="section-label">03 — Scope</div>
+    <h2>Goals &amp; Non-Goals</h2>
+    <p>The tool must make it trivially easy to run the same prompt against multiple models and compare results across output quality, latency, and token usage — all in one screen.</p>
+    <p>It should be runnable locally in under 2 minutes via <code style="font-family:&#39;DM Mono&#39;,monospace;font-size:12px;background:var(--tag-bg);padding:2px 6px;border-radius:4px;border:1px solid var(--border);">docker-compose up</code> and shareable on GitHub without any cloud setup.</p>
+    <p style="margin-bottom: 16px;">No accounts. No signup. No data leaving the user's machine. The only credential required is a free NVIDIA API key — and that stays in a local <code style="font-family:&#39;DM Mono&#39;,monospace;font-size:12px;background:var(--tag-bg);padding:2px 6px;border-radius:4px;border:1px solid var(--border);">.env</code> file.</p>
+    <div class="callout">
+      <p>Not a fine-tuning or training tool</p>
+      <p>Not a production LLM router or proxy</p>
+      <p>Not a SaaS product — no accounts, no billing, no hosted version</p>
+      <p>Not limited to NVIDIA (any OpenAI-compatible endpoint should work)</p>
+      <p>No user accounts required — runs entirely on the user's machine</p>
+      <p>No data leaves the user's machine — prompts and results stay local</p>
+    </div>
+  </section>
+
+  <!-- Features -->
+  <section>
+    <div class="section-label">04 — Features</div>
+    <h2>Feature List</h2>
+
+    <div class="feature-grid">
+      <div class="feature-row header-row">
+        <span></span>
+        <span>Feature</span>
+        <span>Phase</span>
+        <span style="text-align:center">Priority</span>
+      </div>
+
+      <div class="feature-row">
+        <span class="feat-num">01</span>
+        <div>
+          <div class="feat-name">Dynamic model list from API</div>
+          <div class="feat-desc">Fetch available models from NVIDIA endpoint; filter to chat-compatible only</div>
+        </div>
+        <span class="phase-badge phase-1">MVP</span>
+        <div class="priority-dot p-high"></div>
+      </div>
+
+      <div class="feature-row">
+        <span class="feat-num">02</span>
+        <div>
+          <div class="feat-name">Checkbox model selector (max 5)</div>
+          <div class="feat-desc">Grouped by provider; counter badge; disables unchecked once limit reached; persists selection in localStorage</div>
+        </div>
+        <span class="phase-badge phase-1">MVP</span>
+        <div class="priority-dot p-high"></div>
+      </div>
+
+      <div class="feature-row">
+        <span class="feat-num">03</span>
+        <div>
+          <div class="feat-name">Prompt input with system prompt toggle</div>
+          <div class="feat-desc">Single textarea; optional system prompt field; submit fires all selected models in parallel</div>
+        </div>
+        <span class="phase-badge phase-1">MVP</span>
+        <div class="priority-dot p-high"></div>
+      </div>
+
+      <div class="feature-row">
+        <span class="feat-num">04</span>
+        <div>
+          <div class="feat-name">Side-by-side result cards</div>
+          <div class="feat-desc">One card per model; shows output, total latency, token count; copy button per card</div>
+        </div>
+        <span class="phase-badge phase-1">MVP</span>
+        <div class="priority-dot p-high"></div>
+      </div>
+
+      <div class="feature-row">
+        <span class="feat-num">05</span>
+        <div>
+          <div class="feat-name">Latency visualization</div>
+          <div class="feat-desc">Bar chart comparing response times across selected models per run</div>
+        </div>
+        <span class="phase-badge phase-1">MVP</span>
+        <div class="priority-dot p-med"></div>
+      </div>
+
+      <div class="feature-row">
+        <span class="feat-num">06</span>
+        <div>
+          <div class="feat-name">Human eval — vote / rate responses</div>
+          <div class="feat-desc">Thumbs up on each card; winner highlighted; tally persisted in localStorage across sessions</div>
+        </div>
+        <span class="phase-badge phase-2">V2</span>
+        <div class="priority-dot p-med"></div>
+      </div>
+
+      <div class="feature-row">
+        <span class="feat-num">07</span>
+        <div>
+          <div class="feat-name">LLM-as-judge eval</div>
+          <div class="feat-desc">"Auto-evaluate" button fires a judge model after results load; scores each response 1–5 on accuracy, clarity, and conciseness; returns structured JSON displayed as score badges per card</div>
+        </div>
+        <span class="phase-badge phase-2">V2</span>
+        <div class="priority-dot p-high"></div>
+      </div>
+
+      <div class="feature-row">
+        <span class="feat-num">08</span>
+        <div>
+          <div class="feat-name">Run history (localStorage)</div>
+          <div class="feat-desc">Sidebar list of past comparisons including eval scores; click to reload any run</div>
+        </div>
+        <span class="phase-badge phase-2">V2</span>
+        <div class="priority-dot p-med"></div>
+      </div>
+
+      <div class="feature-row">
+        <span class="feat-num">09</span>
+        <div>
+          <div class="feat-name">Shareable comparison URL</div>
+          <div class="feat-desc">Encode prompt + results + eval scores in query params; one-click copy link</div>
+        </div>
+        <span class="phase-badge phase-2">V2</span>
+        <div class="priority-dot p-med"></div>
+      </div>
+
+      <div class="feature-row">
+        <span class="feat-num">10</span>
+        <div>
+          <div class="feat-name">Parameter controls</div>
+          <div class="feat-desc">Temperature, max_tokens sliders; applied globally or per model</div>
+        </div>
+        <span class="phase-badge phase-3">V3</span>
+        <div class="priority-dot p-low"></div>
+      </div>
+
+      <div class="feature-row">
+        <span class="feat-num">11</span>
+        <div>
+          <div class="feat-name">Dataset / batch eval</div>
+          <div class="feat-desc">Upload a CSV of prompts; run all against selected models; aggregate judge scores per model; export results to CSV</div>
+        </div>
+        <span class="phase-badge phase-3">V3</span>
+        <div class="priority-dot p-low"></div>
+      </div>
+
+      <div class="feature-row">
+        <span class="feat-num">12</span>
+        <div>
+          <div class="feat-name">Persistent history (SQLite)</div>
+          <div class="feat-desc">Optional backend DB for long-term eval tracking across sessions; powers batch export</div>
+        </div>
+        <span class="phase-badge phase-3">V3</span>
+        <div class="priority-dot p-low"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Tech Stack -->
+  <section>
+    <div class="section-label">05 — Architecture</div>
+    <h2>Tech Stack</h2>
+    <div class="stack-grid">
+      <div class="stack-card">
+        <div class="stack-layer">Frontend</div>
+        <div class="stack-item">React + Vite</div>
+        <div class="stack-why">Fast dev loop, component model fits card UI</div>
+        <div class="stack-item" style="margin-top:10px">Tailwind CSS</div>
+        <div class="stack-why">Utility-first, easy responsive layout</div>
+      </div>
+      <div class="stack-card">
+        <div class="stack-layer">Backend</div>
+        <div class="stack-item">Python FastAPI</div>
+        <div class="stack-why">Async-native; parallel model calls with asyncio.gather</div>
+        <div class="stack-item" style="margin-top:10px">openai Python SDK</div>
+        <div class="stack-why">OpenAI-compatible; one client, any endpoint</div>
+      </div>
+      <div class="stack-card">
+        <div class="stack-layer">Infrastructure</div>
+        <div class="stack-item">Docker Compose</div>
+        <div class="stack-why">One-command run; zero local setup friction</div>
+        <div class="stack-item" style="margin-top:10px">NVIDIA NIM API</div>
+        <div class="stack-why">~80 free hosted models; OpenAI-compatible</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Success Metrics -->
+  <section>
+    <div class="section-label">06 — Success</div>
+    <h2>Success Metrics</h2>
+    <div class="metrics-row">
+      <div class="metric-card">
+        <div class="metric-value">&lt; 2m</div>
+        <div class="metric-label">Time from clone to first comparison running</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-value">5</div>
+        <div class="metric-label">Models comparable in a single run</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-value">⭐ 50</div>
+        <div class="metric-label">GitHub stars as initial traction signal</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Phases -->
+  <section>
+    <div class="section-label">07 — Roadmap</div>
+    <h2>Delivery Phases</h2>
+    <div class="timeline">
+      <div class="tl-item">
+        <div class="tl-dot filled"></div>
+        <div class="tl-phase p1">Phase 1 — MVP</div>
+        <div class="tl-title">Get it on GitHub</div>
+        <ul class="tl-items">
+          <li>Dynamic model list from NVIDIA API (chat models only)</li>
+          <li>Checkbox selector (up to 5) grouped by provider</li>
+          <li>Prompt input + parallel API calls via FastAPI</li>
+          <li>Result cards with latency + token count</li>
+          <li>Copy button per card; latency bar chart</li>
+          <li>docker-compose.yml + README with setup instructions</li>
+        </ul>
+      </div>
+      <div class="tl-item">
+        <div class="tl-dot"></div>
+        <div class="tl-phase p2">Phase 2 — Worth Starring</div>
+        <div class="tl-title">Eval layer + community hooks</div>
+        <ul class="tl-items">
+          <li>Human eval — thumbs up voting per card; winner highlighted</li>
+          <li>LLM-as-judge — "Auto-evaluate" button scores responses 1–5 on accuracy, clarity, conciseness</li>
+          <li>Judge model is user-selectable; prompt is transparent and editable</li>
+          <li>Run history saved in localStorage (includes eval scores)</li>
+          <li>Shareable URL encoding prompt + results + scores</li>
+          <li>System prompt support</li>
+        </ul>
+      </div>
+      <div class="tl-item">
+        <div class="tl-dot"></div>
+        <div class="tl-phase p3">Phase 3 — Power Users</div>
+        <div class="tl-title">Depth &amp; data</div>
+        <ul class="tl-items">
+          <li>Temperature / max_tokens controls per model</li>
+          <li>Dataset / batch eval — upload CSV of prompts, aggregate judge scores per model</li>
+          <li>SQLite persistence + CSV export of eval results</li>
+          <li>Support for additional OpenAI-compatible endpoints</li>
+          <li>Streaming responses with time-to-first-token tracking</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- Timeline -->
+  <section>
+    <div class="section-label">08 — Timeline</div>
+    <h2>MVP Target: May 3, 2026</h2>
+    <p style="margin-bottom:24px;">10 days from kick-off. Claude Code handles scaffolding and boilerplate — human effort focused on integration, UX decisions, and testing.</p>
+
+    <div class="timeline">
+
+      <div class="tl-item">
+        <div class="tl-dot filled"></div>
+        <div class="tl-phase p1">Apr 23–24 · Days 1–2</div>
+        <div class="tl-title">Project scaffold &amp; backend</div>
+        <ul class="tl-items">
+          <li>Claude Code generates full project structure</li>
+          <li>FastAPI app with NVIDIA API integration</li>
+          <li>Model list endpoint — fetch + filter to chat models</li>
+          <li>Parallel inference endpoint via asyncio.gather</li>
+          <li>docker-compose.yml wired up, env vars working</li>
+        </ul>
+      </div>
+
+      <div class="tl-item">
+        <div class="tl-dot filled"></div>
+        <div class="tl-phase p1">Apr 25–26 · Days 3–4</div>
+        <div class="tl-title">Frontend shell + model selector</div>
+        <ul class="tl-items">
+          <li>React + Vite + Tailwind setup</li>
+          <li>Model selector — checkboxes grouped by provider</li>
+          <li>5-model cap with counter badge + disabled states</li>
+          <li>localStorage persistence for last selection</li>
+          <li>Frontend talking to backend — end-to-end smoke test</li>
+        </ul>
+      </div>
+
+      <div class="tl-item">
+        <div class="tl-dot"></div>
+        <div class="tl-phase p1">Apr 27–28 · Days 5–6</div>
+        <div class="tl-title">Result cards + latency chart</div>
+        <ul class="tl-items">
+          <li>Prompt input + optional system prompt toggle</li>
+          <li>Result cards — output, latency, token count, copy button</li>
+          <li>Loading states per card (models respond at different speeds)</li>
+          <li>Latency bar chart comparing all selected models</li>
+        </ul>
+      </div>
+
+      <div class="tl-item">
+        <div class="tl-dot"></div>
+        <div class="tl-phase p1">Apr 29–30 · Days 7–8</div>
+        <div class="tl-title">Integration, edge cases &amp; polish</div>
+        <ul class="tl-items">
+          <li>Error handling — model failures, timeouts, rate limits</li>
+          <li>Empty states, loading skeletons, responsive layout</li>
+          <li>Cross-platform Docker testing (Mac + Linux minimum)</li>
+          <li>End-to-end run: clone → docker-compose up → first comparison</li>
+        </ul>
+      </div>
+
+      <div class="tl-item">
+        <div class="tl-dot"></div>
+        <div class="tl-phase p1">May 1–2 · Days 9–10</div>
+        <div class="tl-title">README + pre-launch prep</div>
+        <ul class="tl-items">
+          <li>README — setup instructions, screenshots, feature list</li>
+          <li>.env.example with all required vars documented</li>
+          <li>GitHub repo setup — Discussions enabled, issue labels created</li>
+          <li>Seed roadmap with feature requests from PRD</li>
+          <li>Final review pass — does it work in under 2 minutes from clone?</li>
+        </ul>
+      </div>
+
+      <div class="tl-item">
+        <div class="tl-dot"></div>
+        <div class="tl-phase p1" style="color:var(--accent);">May 3 · Launch</div>
+        <div class="tl-title">MVP ships 🚀</div>
+        <ul class="tl-items">
+          <li>Repo goes public</li>
+          <li>Share on X / LinkedIn / relevant communities</li>
+          <li>Begin collecting feedback via GitHub Discussions</li>
+        </ul>
+      </div>
+
+    </div>
+
+    <div style="margin-top:24px;" class="callout">
+      <p style="color:#9990d8;">Buffer built in: Days 9–10 are intentionally light — real buffer for anything that slips</p>
+      <p style="color:#9990d8;">Docker debugging always takes longer than expected — front-load it on Day 2</p>
+      <p style="color:#9990d8;">V2 eval features (LLM-as-judge, voting, history) begin after May 3</p>
+    </div>
+  </section>
+
+  <!-- Community Roadmap -->
+  <section>
+    <div class="section-label">09 — Community</div>
+    <h2>Roadmap &amp; Feature Requests</h2>
+    <p>The roadmap is public and community-driven. Anyone can suggest improvements or vote on what gets built next — no account beyond GitHub required.</p>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:16px;">
+      <div class="card">
+        <div class="card-label opportunity">Suggest a feature</div>
+        <p>Open a <strong style="color:var(--text);font-weight:500">GitHub Discussion</strong> under the <em>Ideas</em> category. Describe the use case, not just the feature. The more context, the faster it moves.</p>
+      </div>
+      <div class="card">
+        <div class="card-label" style="color:var(--accent)">Vote on existing ideas</div>
+        <p>Browse open Discussions and react with <strong style="color:var(--text);font-weight:500">👍</strong> on the ones you want prioritized. Top-voted ideas get pulled into the next phase planning cycle.</p>
+      </div>
+    </div>
+
+    <div style="margin-top:12px;" class="card">
+      <div class="card-label" style="color:var(--amber)">Contribution guidelines</div>
+      <p>PRs welcome for Phase 1 features. For anything larger, open a Discussion first so we can align on approach before you invest the time. Tag your issue with one of: <code style="font-family:&#39;DM Mono&#39;,monospace;font-size:11px;background:var(--tag-bg);padding:2px 6px;border-radius:4px;border:1px solid var(--border);">bug</code> <code style="font-family:&#39;DM Mono&#39;,monospace;font-size:11px;background:var(--tag-bg);padding:2px 6px;border-radius:4px;border:1px solid var(--border);">feature-request</code> <code style="font-family:&#39;DM Mono&#39;,monospace;font-size:11px;background:var(--tag-bg);padding:2px 6px;border-radius:4px;border:1px solid var(--border);">eval</code> <code style="font-family:&#39;DM Mono&#39;,monospace;font-size:11px;background:var(--tag-bg);padding:2px 6px;border-radius:4px;border:1px solid var(--border);">dx</code></p>
+    </div>
+
+    <div style="margin-top:24px;">
+      <div class="section-label" style="font-size:9px;margin-bottom:14px;">Top community requests (seed list)</div>
+      <div class="feature-grid">
+        <div class="feature-row header-row">
+          <span></span>
+          <span>Request</span>
+          <span>Status</span>
+          <span style="text-align:center">Votes</span>
+        </div>
+        <div class="feature-row">
+          <span class="feat-num">—</span>
+          <div>
+            <div class="feat-name">Streaming responses</div>
+            <div class="feat-desc">Show tokens as they arrive; display time-to-first-token separately from total latency</div>
+          </div>
+          <span class="phase-badge phase-3">Planned</span>
+          <div style="font-family:&#39;DM Mono&#39;,monospace;font-size:12px;color:var(--muted);text-align:center;">—</div>
+        </div>
+        <div class="feature-row">
+          <span class="feat-num">—</span>
+          <div>
+            <div class="feat-name">Custom OpenAI-compatible endpoints</div>
+            <div class="feat-desc">Point the tool at Ollama, Together AI, Groq, or any local model server</div>
+          </div>
+          <span class="phase-badge phase-3">Planned</span>
+          <div style="font-family:&#39;DM Mono&#39;,monospace;font-size:12px;color:var(--muted);text-align:center;">—</div>
+        </div>
+        <div class="feature-row">
+          <span class="feat-num">—</span>
+          <div>
+            <div class="feat-name">Custom judge prompt</div>
+            <div class="feat-desc">Let users edit the LLM-as-judge criteria to match their specific use case</div>
+          </div>
+          <span class="phase-badge phase-2">Backlog</span>
+          <div style="font-family:&#39;DM Mono&#39;,monospace;font-size:12px;color:var(--muted);text-align:center;">—</div>
+        </div>
+        <div class="feature-row">
+          <span class="feat-num">—</span>
+          <div>
+            <div class="feat-name">Prompt library</div>
+            <div class="feat-desc">Save and reuse prompts across sessions; share prompt sets with the community</div>
+          </div>
+          <span class="phase-badge" style="background:rgba(107,107,138,0.1);color:var(--muted);border:1px solid var(--border);">Open</span>
+          <div style="font-family:&#39;DM Mono&#39;,monospace;font-size:12px;color:var(--muted);text-align:center;">—</div>
+        </div>
+      </div>
+      <p style="font-size:12px;color:var(--muted);margin-top:10px;font-style:italic;">Vote counts will be tracked in GitHub Discussions once the repo is live.</p>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <div class="doc-footer">
+    <span>LLM Benchmarker · PRD v0.2</span>
+    <span>April 2026 · Open Source</span>
+  </div>
+
+</div>
+
+
+</body></html>
