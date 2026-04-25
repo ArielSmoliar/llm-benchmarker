@@ -1,5 +1,7 @@
 import asyncio
+import json
 import os
+import re
 import time
 from typing import List, Optional
 
@@ -196,6 +198,167 @@ async def benchmark(request: BenchmarkRequest):
             results.append(result.model_dump())
 
     return {"results": results}
+
+
+JUDGE_PROMPT_TEMPLATE = """\
+You are an impartial LLM evaluator. You will be given a user prompt and responses from {n} different language models. Score each response on three criteria, each from 1 to 5:
+
+- **accuracy**: Is the answer factually correct and directly addresses the question?
+- **clarity**: Is the response well-structured, easy to follow, and free of unnecessary jargon?
+- **conciseness**: Does the response avoid padding, repetition, and irrelevant content?
+
+Respond with ONLY valid JSON in this exact schema — no markdown fences, no explanation outside the JSON:
+
+{{
+  "evaluations": [
+    {{
+      "model_id": "<model id string>",
+      "accuracy": <1-5>,
+      "clarity": <1-5>,
+      "conciseness": <1-5>,
+      "reasoning": "<one or two sentences>"
+    }}
+  ]
+}}
+
+---
+USER PROMPT:
+{prompt}
+
+---
+RESPONSES TO EVALUATE:
+{responses}
+"""
+
+
+def _extract_json(text: str) -> dict:
+    """Three-level defensive JSON extraction."""
+    # Level 1: direct parse
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        pass
+
+    # Level 2: strip markdown code fences
+    stripped = re.sub(r"^```(?:json)?\s*", "", text.strip(), flags=re.MULTILINE)
+    stripped = re.sub(r"\s*```$", "", stripped.strip(), flags=re.MULTILINE)
+    try:
+        return json.loads(stripped)
+    except json.JSONDecodeError:
+        pass
+
+    # Level 3: extract outermost {...} block
+    match = re.search(r"\{[\s\S]*\}", text)
+    if match:
+        try:
+            return json.loads(match.group())
+        except json.JSONDecodeError:
+            pass
+
+    raise ValueError(f"Could not extract JSON from judge response: {text[:300]}")
+
+
+class JudgeScores(BaseModel):
+    model_id: str
+    accuracy: Optional[int] = None
+    clarity: Optional[int] = None
+    conciseness: Optional[int] = None
+    reasoning: Optional[str] = None
+    error: Optional[str] = None
+
+
+class JudgeRequest(BaseModel):
+    judge_model: str
+    prompt: str
+    results: List[dict]  # list of ModelResult dicts (model_id + content)
+
+
+async def call_judge(
+    client: httpx.AsyncClient,
+    api_key: str,
+    judge_model: str,
+    prompt: str,
+    results: List[dict],
+) -> List[JudgeScores]:
+    # Build the responses block — only include successful results
+    valid = [r for r in results if r.get("content")]
+    if not valid:
+        return [
+            JudgeScores(model_id=r["model_id"], error="No content to evaluate")
+            for r in results
+        ]
+
+    responses_block = "\n\n".join(
+        f"[Model: {r['model_id']}]\n{r['content']}" for r in valid
+    )
+    judge_prompt = JUDGE_PROMPT_TEMPLATE.format(
+        n=len(valid),
+        prompt=prompt,
+        responses=responses_block,
+    )
+
+    try:
+        resp = await client.post(
+            f"{NVIDIA_API_BASE}/chat/completions",
+            headers={
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "model": judge_model,
+                "messages": [{"role": "user", "content": judge_prompt}],
+                "max_tokens": 2048,
+                "temperature": 0.1,
+            },
+            timeout=REQUEST_TIMEOUT,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        raw_content = data["choices"][0]["message"]["content"]
+        parsed = _extract_json(raw_content)
+        evaluations = parsed.get("evaluations", [])
+    except Exception as exc:
+        error_msg = f"Judge call failed: {str(exc)[:200]}"
+        return [JudgeScores(model_id=r["model_id"], error=error_msg) for r in results]
+
+    # Map parsed scores back to all models (including failed ones)
+    scores_by_model = {e["model_id"]: e for e in evaluations}
+    output = []
+    for r in results:
+        mid = r["model_id"]
+        if mid in scores_by_model:
+            e = scores_by_model[mid]
+            output.append(
+                JudgeScores(
+                    model_id=mid,
+                    accuracy=e.get("accuracy"),
+                    clarity=e.get("clarity"),
+                    conciseness=e.get("conciseness"),
+                    reasoning=e.get("reasoning"),
+                )
+            )
+        elif not r.get("content"):
+            output.append(JudgeScores(model_id=mid, error="Model had no output to evaluate"))
+        else:
+            output.append(JudgeScores(model_id=mid, error="Judge did not return scores for this model"))
+    return output
+
+
+@app.post("/api/judge")
+async def judge(request: JudgeRequest):
+    if not request.judge_model.strip():
+        raise HTTPException(status_code=400, detail="judge_model is required")
+    if not request.prompt.strip():
+        raise HTTPException(status_code=400, detail="prompt is required")
+    if not request.results:
+        raise HTTPException(status_code=400, detail="results list is required")
+
+    api_key = get_api_key()
+
+    async with httpx.AsyncClient() as client:
+        scores = await call_judge(client, api_key, request.judge_model, request.prompt, request.results)
+
+    return {"scores": [s.model_dump() for s in scores]}
 
 
 @app.get("/health")

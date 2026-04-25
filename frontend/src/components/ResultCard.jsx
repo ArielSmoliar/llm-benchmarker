@@ -2,7 +2,7 @@ import { useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 
-export default function ResultCard({ result }) {
+export default function ResultCard({ result, judgeScores, isWinner }) {
   const [copied, setCopied] = useState(false)
 
   async function copyToClipboard() {
@@ -23,7 +23,11 @@ export default function ResultCard({ result }) {
   return (
     <div
       className={`flex flex-col bg-[#13131a] rounded-xl border overflow-hidden ${
-        result.error ? 'border-red-900/60' : 'border-[#1e1e2e]'
+        isWinner
+          ? 'border-purple-600/60 shadow-lg shadow-purple-900/20'
+          : result.error
+          ? 'border-red-900/60'
+          : 'border-[#1e1e2e]'
       }`}
     >
       {/* Card header */}
@@ -34,12 +38,19 @@ export default function ResultCard({ result }) {
               {provider}
             </p>
           )}
-          <p
-            className="text-sm font-medium text-white leading-tight truncate"
-            title={modelName}
-          >
-            {modelName}
-          </p>
+          <div className="flex items-center gap-2">
+            <p
+              className="text-sm font-medium text-white leading-tight truncate"
+              title={modelName}
+            >
+              {modelName}
+            </p>
+            {isWinner && (
+              <span className="flex-shrink-0 text-[10px] font-semibold px-1.5 py-0.5 bg-purple-900/40 border border-purple-700/50 text-purple-300 rounded">
+                Best
+              </span>
+            )}
+          </div>
         </div>
 
         <div className="flex items-center gap-1.5 flex-shrink-0">
@@ -84,6 +95,27 @@ export default function ResultCard({ result }) {
         </div>
       )}
 
+      {/* Judge scores */}
+      {judgeScores && !judgeScores.error && (
+        <div className="px-4 py-2.5 border-b border-[#1e1e2e] space-y-2">
+          <div className="flex items-center gap-3">
+            <ScorePill label="Accuracy" value={judgeScores.accuracy} />
+            <ScorePill label="Clarity" value={judgeScores.clarity} />
+            <ScorePill label="Conciseness" value={judgeScores.conciseness} />
+          </div>
+          {judgeScores.reasoning && (
+            <p className="text-[11px] text-gray-500 leading-relaxed italic">
+              {judgeScores.reasoning}
+            </p>
+          )}
+        </div>
+      )}
+      {judgeScores?.error && (
+        <div className="px-4 py-2 border-b border-[#1e1e2e]">
+          <p className="text-[11px] text-yellow-600">{judgeScores.error}</p>
+        </div>
+      )}
+
       {/* Content */}
       <div className="flex-1 p-4 overflow-y-auto max-h-80 min-h-[6rem]">
         {result.error ? (
@@ -102,6 +134,20 @@ export default function ResultCard({ result }) {
         )}
       </div>
     </div>
+  )
+}
+
+function ScorePill({ label, value }) {
+  if (value == null) return null
+  const color =
+    value >= 4 ? 'text-green-400 border-green-900/50 bg-green-950/30' :
+    value === 3 ? 'text-yellow-400 border-yellow-900/50 bg-yellow-950/20' :
+    'text-red-400 border-red-900/50 bg-red-950/20'
+  return (
+    <span className={`inline-flex items-center gap-1 text-[11px] font-mono px-2 py-0.5 rounded border ${color}`}>
+      <span className="text-gray-500 font-sans">{label}</span>
+      <span className="font-semibold">{value}/5</span>
+    </span>
   )
 }
 

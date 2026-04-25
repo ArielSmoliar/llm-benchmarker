@@ -34,6 +34,11 @@ export default function App() {
   const [results, setResults] = useState([])
   const [benchmarkError, setBenchmarkError] = useState(null)
 
+  const [judgeModel, setJudgeModel] = useState('')
+  const [judging, setJudging] = useState(false)
+  const [judgeScores, setJudgeScores] = useState([])
+  const [judgeError, setJudgeError] = useState(null)
+
   // Fetch available models on mount
   useEffect(() => {
     fetchModels()
@@ -43,6 +48,15 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(selectedModels))
   }, [selectedModels])
+
+  // Auto-select a default judge model (prefer 70b+)
+  useEffect(() => {
+    if (modelGroups.length > 0 && !judgeModel) {
+      const all = modelGroups.flatMap((g) => g.models)
+      const preferred = all.find((m) => /70b|nemotron|405b/i.test(m.id))
+      setJudgeModel(preferred?.id || all[0]?.id || '')
+    }
+  }, [modelGroups])
 
   async function fetchModels() {
     setLoadingModels(true)
@@ -66,11 +80,41 @@ export default function App() {
     }
   }
 
+  async function runJudge() {
+    if (!judgeModel || judging || results.length === 0) return
+    setJudging(true)
+    setJudgeScores([])
+    setJudgeError(null)
+    try {
+      const res = await fetch('/api/judge', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          judge_model: judgeModel,
+          prompt: prompt.trim(),
+          results,
+        }),
+      })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        throw new Error(data.detail || `HTTP ${res.status}`)
+      }
+      const data = await res.json()
+      setJudgeScores(data.scores)
+    } catch (err) {
+      setJudgeError(err.message)
+    } finally {
+      setJudging(false)
+    }
+  }
+
   async function runBenchmark() {
     if (!prompt.trim() || selectedModels.length === 0 || benchmarking) return
     setBenchmarking(true)
     setResults([])
     setBenchmarkError(null)
+    setJudgeScores([])
+    setJudgeError(null)
 
     try {
       const res = await fetch('/api/benchmark', {
@@ -204,11 +248,40 @@ export default function App() {
                 </span>
               </div>
 
-              <div className={`grid gap-4 w-full ${gridClass(results.length)}`}>
-                {results.map((result) => (
-                  <ResultCard key={result.model_id} result={result} />
-                ))}
-              </div>
+              {/* Judge panel */}
+              <JudgePanel
+                modelGroups={modelGroups}
+                judgeModel={judgeModel}
+                onJudgeModelChange={setJudgeModel}
+                onEvaluate={runJudge}
+                judging={judging}
+                judgeError={judgeError}
+                hasScores={judgeScores.length > 0}
+              />
+
+              {/* Result cards */}
+              {(() => {
+                const scoreMap = Object.fromEntries(judgeScores.map((s) => [s.model_id, s]))
+                const avgScore = (s) =>
+                  s && !s.error ? ((s.accuracy || 0) + (s.clarity || 0) + (s.conciseness || 0)) / 3 : 0
+                const winnerId =
+                  judgeScores.length > 0
+                    ? judgeScores.reduce((best, s) => (avgScore(s) > avgScore(best) ? s : best), judgeScores[0])
+                        ?.model_id
+                    : null
+                return (
+                  <div className={`grid gap-4 w-full ${gridClass(results.length)}`}>
+                    {results.map((result) => (
+                      <ResultCard
+                        key={result.model_id}
+                        result={result}
+                        judgeScores={scoreMap[result.model_id]}
+                        isWinner={!!winnerId && result.model_id === winnerId}
+                      />
+                    ))}
+                  </div>
+                )
+              })()}
 
               <LatencyChart results={results} />
             </section>
@@ -244,6 +317,60 @@ export default function App() {
           </div>
         </footer>
       </div>
+    </div>
+  )
+}
+
+function JudgePanel({ modelGroups, judgeModel, onJudgeModelChange, onEvaluate, judging, judgeError, hasScores }) {
+  const allModels = modelGroups.flatMap((g) => g.models)
+  return (
+    <div className="border border-[#1e1e2e] bg-[#0d0d15] rounded-xl p-4">
+      <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+        <div className="min-w-0">
+          <p className="text-xs font-semibold text-gray-200">Auto-evaluate</p>
+          <p className="text-[11px] text-gray-500 mt-0.5">
+            A judge model scores each response on accuracy, clarity, and conciseness (1–5)
+          </p>
+        </div>
+        <div className="flex items-center gap-2 sm:ml-auto flex-shrink-0">
+          <select
+            value={judgeModel}
+            onChange={(e) => onJudgeModelChange(e.target.value)}
+            disabled={judging}
+            className="bg-[#13131a] border border-[#1e1e2e] text-xs text-gray-300 rounded-lg px-3 py-1.5 focus:outline-none focus:border-purple-700 disabled:opacity-40 max-w-[260px] truncate"
+          >
+            {allModels.map((m) => (
+              <option key={m.id} value={m.id}>
+                {m.id}
+              </option>
+            ))}
+          </select>
+          <button
+            onClick={onEvaluate}
+            disabled={judging || !judgeModel}
+            className="inline-flex items-center gap-1.5 px-4 py-1.5 bg-[#13131a] hover:bg-[#1a1a2e] disabled:opacity-40 disabled:cursor-not-allowed border border-purple-800/50 text-purple-300 text-xs font-medium rounded-lg whitespace-nowrap"
+          >
+            {judging ? (
+              <>
+                <svg className="animate-spin h-3.5 w-3.5" viewBox="0 0 24 24" fill="none">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                </svg>
+                Evaluating…
+              </>
+            ) : hasScores ? (
+              'Re-evaluate'
+            ) : (
+              'Evaluate'
+            )}
+          </button>
+        </div>
+      </div>
+      {judgeError && (
+        <p className="mt-2 text-xs text-red-400">
+          Judge error: {judgeError}
+        </p>
+      )}
     </div>
   )
 }
