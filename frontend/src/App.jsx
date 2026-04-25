@@ -5,6 +5,15 @@ import ResultCard from './components/ResultCard'
 import LatencyChart from './components/LatencyChart'
 
 const STORAGE_KEY = 'llm-benchmarker:selected-models'
+const HISTORY_KEY = 'llm-benchmarker:run-history'
+const MAX_HISTORY = 20
+
+function loadHistory() {
+  try { return JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]') } catch { return [] }
+}
+function persistHistory(runs) {
+  localStorage.setItem(HISTORY_KEY, JSON.stringify(runs))
+}
 
 function gridClass(count) {
   if (count === 1) return 'grid-cols-1 max-w-2xl mx-auto'
@@ -41,6 +50,10 @@ export default function App() {
   const [judging, setJudging] = useState(false)
   const [judgeScores, setJudgeScores] = useState([])
   const [judgeError, setJudgeError] = useState(null)
+
+  const [history, setHistory] = useState(loadHistory)
+  const [showHistory, setShowHistory] = useState(false)
+  const [activeRunId, setActiveRunId] = useState(null)
 
   // Fetch available models on mount
   useEffect(() => {
@@ -104,6 +117,13 @@ export default function App() {
       }
       const data = await res.json()
       setJudgeScores(data.scores)
+      if (activeRunId) {
+        setHistory((prev) => {
+          const next = prev.map((r) => r.id === activeRunId ? { ...r, judgeScores: data.scores } : r)
+          persistHistory(next)
+          return next
+        })
+      }
     } catch (err) {
       setJudgeError(err.message)
     } finally {
@@ -137,6 +157,21 @@ export default function App() {
       }
       const data = await res.json()
       setResults(data.results)
+      const run = {
+        id: Date.now(),
+        timestamp: new Date().toISOString(),
+        prompt: prompt.trim(),
+        systemPrompt: showSystemPrompt ? systemPrompt.trim() : '',
+        models: selectedModels,
+        results: data.results,
+        judgeScores: [],
+      }
+      setActiveRunId(run.id)
+      setHistory((prev) => {
+        const next = [run, ...prev].slice(0, MAX_HISTORY)
+        persistHistory(next)
+        return next
+      })
     } catch (err) {
       setBenchmarkError(err.message)
     } finally {
@@ -177,6 +212,29 @@ export default function App() {
     }
   }
 
+  function restoreRun(run) {
+    setPrompt(run.prompt)
+    setSystemPrompt(run.systemPrompt || '')
+    setShowSystemPrompt(!!run.systemPrompt)
+    setSelectedModels(run.models)
+    setResults(run.results)
+    setJudgeScores(run.judgeScores || [])
+    setJudgeError(null)
+    setVotes({})
+    setRegenerating(new Set())
+    setActiveRunId(run.id)
+    setShowHistory(false)
+  }
+
+  function deleteRun(id) {
+    setHistory((prev) => {
+      const next = prev.filter((r) => r.id !== id)
+      persistHistory(next)
+      return next
+    })
+    if (activeRunId === id) setActiveRunId(null)
+  }
+
   const canRun = !benchmarking && selectedModels.length > 0 && prompt.trim().length > 0
 
   return (
@@ -204,7 +262,19 @@ export default function App() {
               <h1 className="text-base font-bold text-white leading-none">LLM Benchmarker</h1>
               <p className="text-[11px] text-gray-500 mt-0.5">Compare AI models side-by-side</p>
             </div>
-            <div className="ml-auto">
+            <div className="ml-auto flex items-center gap-4">
+              <button
+                onClick={() => setShowHistory(true)}
+                className="relative inline-flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-300"
+              >
+                <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                History
+                {history.length > 0 && (
+                  <span className="text-[10px] font-mono bg-[#1e1e2e] px-1.5 py-0.5 rounded-full">{history.length}</span>
+                )}
+              </button>
               <a
                 href="https://build.nvidia.com/models"
                 target="_blank"
@@ -347,6 +417,20 @@ export default function App() {
           )}
         </main>
 
+        <HistoryDrawer
+          open={showHistory}
+          onClose={() => setShowHistory(false)}
+          history={history}
+          activeRunId={activeRunId}
+          onRestore={restoreRun}
+          onDelete={deleteRun}
+          onClearAll={() => {
+            setHistory([])
+            persistHistory([])
+            setActiveRunId(null)
+          }}
+        />
+
         <footer className="border-t border-[#1e1e2e] px-6 py-4">
           <div className="max-w-7xl mx-auto flex items-center justify-between">
             <p className="text-[11px] text-gray-600">
@@ -358,6 +442,121 @@ export default function App() {
             <p className="text-[11px] text-gray-600">No data leaves your machine</p>
           </div>
         </footer>
+      </div>
+    </div>
+  )
+}
+
+function HistoryDrawer({ open, onClose, history, activeRunId, onRestore, onDelete, onClearAll }) {
+  return (
+    <>
+      {/* Backdrop */}
+      {open && (
+        <div
+          className="fixed inset-0 bg-black/50 z-30"
+          onClick={onClose}
+        />
+      )}
+      {/* Drawer */}
+      <div
+        className={`fixed top-0 right-0 h-full w-full max-w-sm bg-[#0d0d15] border-l border-[#1e1e2e] z-40 flex flex-col transition-transform duration-200 ${
+          open ? 'translate-x-0' : 'translate-x-full'
+        }`}
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between px-5 py-4 border-b border-[#1e1e2e]">
+          <div>
+            <p className="text-sm font-semibold text-white">Run History</p>
+            <p className="text-[11px] text-gray-500">{history.length} saved run{history.length !== 1 ? 's' : ''}</p>
+          </div>
+          <div className="flex items-center gap-3">
+            {history.length > 0 && (
+              <button
+                onClick={onClearAll}
+                className="text-[11px] text-gray-600 hover:text-red-400"
+              >
+                Clear all
+              </button>
+            )}
+            <button onClick={onClose} className="text-gray-500 hover:text-gray-300 p-1">
+              <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        {/* List */}
+        <div className="flex-1 overflow-y-auto">
+          {history.length === 0 ? (
+            <div className="flex flex-col items-center justify-center h-48 text-gray-600 text-xs">
+              <svg className="w-8 h-8 mb-2 opacity-30" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              No runs yet
+            </div>
+          ) : (
+            history.map((run) => (
+              <HistoryEntry
+                key={run.id}
+                run={run}
+                isActive={run.id === activeRunId}
+                onRestore={() => onRestore(run)}
+                onDelete={() => onDelete(run.id)}
+              />
+            ))
+          )}
+        </div>
+      </div>
+    </>
+  )
+}
+
+function HistoryEntry({ run, isActive, onRestore, onDelete }) {
+  const succeeded = run.results.filter((r) => !r.error).length
+  const date = new Date(run.timestamp)
+  const timeStr = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+  const dateStr = date.toLocaleDateString([], { month: 'short', day: 'numeric' })
+  const hasScores = run.judgeScores?.length > 0
+
+  return (
+    <div
+      className={`px-5 py-4 border-b border-[#1e1e2e] cursor-pointer hover:bg-[#13131a] ${
+        isActive ? 'bg-[#13131a] border-l-2 border-l-purple-600' : ''
+      }`}
+      onClick={onRestore}
+    >
+      <div className="flex items-start justify-between gap-2">
+        <p className="text-xs text-gray-300 leading-snug line-clamp-2 flex-1">{run.prompt}</p>
+        <button
+          onClick={(e) => { e.stopPropagation(); onDelete() }}
+          className="text-gray-700 hover:text-red-400 flex-shrink-0 p-0.5"
+        >
+          <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
+      <div className="mt-2 flex items-center gap-2 flex-wrap">
+        <span className="text-[10px] text-gray-600 font-mono">{dateStr} {timeStr}</span>
+        <span className="text-[10px] text-gray-600">·</span>
+        <span className="text-[10px] text-gray-500">{succeeded}/{run.results.length} ok</span>
+        {hasScores && (
+          <>
+            <span className="text-[10px] text-gray-600">·</span>
+            <span className="text-[10px] text-purple-500">evaluated</span>
+          </>
+        )}
+      </div>
+      <div className="mt-1.5 flex flex-wrap gap-1">
+        {run.models.slice(0, 3).map((m) => (
+          <span key={m} className="text-[10px] font-mono bg-[#1a1a2e] text-gray-500 px-1.5 py-0.5 rounded">
+            {m.split('/').pop()}
+          </span>
+        ))}
+        {run.models.length > 3 && (
+          <span className="text-[10px] font-mono text-gray-600">+{run.models.length - 3}</span>
+        )}
       </div>
     </div>
   )
