@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import ModelSelector from './components/ModelSelector'
 import PromptInput from './components/PromptInput'
 import ResultCard from './components/ResultCard'
@@ -13,6 +13,22 @@ function loadHistory() {
 }
 function persistHistory(runs) {
   localStorage.setItem(HISTORY_KEY, JSON.stringify(runs))
+}
+
+function getUrlParams() {
+  const p = new URLSearchParams(window.location.search)
+  return {
+    prompt: p.get('p') || '',
+    models: p.get('m') ? p.get('m').split(',').filter(Boolean) : [],
+  }
+}
+
+function setUrlParams(prompt, models) {
+  const p = new URLSearchParams()
+  if (prompt) p.set('p', prompt)
+  if (models.length) p.set('m', models.join(','))
+  const qs = p.toString()
+  window.history.replaceState(null, '', qs ? `?${qs}` : window.location.pathname)
 }
 
 function gridClass(count) {
@@ -35,7 +51,9 @@ export default function App() {
     }
   })
 
-  const [prompt, setPrompt] = useState('')
+  const urlParamsApplied = useRef(false)
+
+  const [prompt, setPrompt] = useState(() => getUrlParams().prompt)
   const [systemPrompt, setSystemPrompt] = useState('')
   const [showSystemPrompt, setShowSystemPrompt] = useState(false)
 
@@ -64,6 +82,19 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(selectedModels))
   }, [selectedModels])
+
+  // Apply URL model params once after model list loads
+  useEffect(() => {
+    if (modelGroups.length > 0 && !urlParamsApplied.current) {
+      urlParamsApplied.current = true
+      const { models: urlModels } = getUrlParams()
+      if (urlModels.length > 0) {
+        const allIds = modelGroups.flatMap((g) => g.models.map((m) => m.id))
+        const valid = urlModels.filter((id) => allIds.includes(id))
+        if (valid.length > 0) setSelectedModels(valid)
+      }
+    }
+  }, [modelGroups])
 
   // Auto-select a default judge model (prefer 70b+)
   useEffect(() => {
@@ -157,6 +188,7 @@ export default function App() {
       }
       const data = await res.json()
       setResults(data.results)
+      setUrlParams(prompt.trim(), selectedModels)
       const run = {
         id: Date.now(),
         timestamp: new Date().toISOString(),
@@ -354,6 +386,7 @@ export default function App() {
                 <span className="text-xs font-mono text-gray-600">
                   {results.filter((r) => !r.error).length}/{results.length} succeeded
                 </span>
+                <CopyLinkButton />
               </div>
 
               {/* Judge panel */}
@@ -444,6 +477,40 @@ export default function App() {
         </footer>
       </div>
     </div>
+  )
+}
+
+function CopyLinkButton() {
+  const [copied, setCopied] = useState(false)
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(window.location.href)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    } catch {}
+  }
+  return (
+    <button
+      onClick={copy}
+      className="inline-flex items-center gap-1 text-[11px] text-gray-600 hover:text-gray-300"
+      title="Copy shareable link"
+    >
+      {copied ? (
+        <>
+          <svg className="w-3.5 h-3.5 text-green-400" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+          </svg>
+          <span className="text-green-400">Copied!</span>
+        </>
+      ) : (
+        <>
+          <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+          </svg>
+          Copy link
+        </>
+      )}
+    </button>
   )
 }
 
