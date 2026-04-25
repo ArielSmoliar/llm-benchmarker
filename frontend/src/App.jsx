@@ -34,6 +34,9 @@ export default function App() {
   const [results, setResults] = useState([])
   const [benchmarkError, setBenchmarkError] = useState(null)
 
+  const [votes, setVotes] = useState({}) // { [model_id]: 'up' | 'down' | null }
+  const [regenerating, setRegenerating] = useState(new Set())
+
   const [judgeModel, setJudgeModel] = useState('')
   const [judging, setJudging] = useState(false)
   const [judgeScores, setJudgeScores] = useState([])
@@ -115,6 +118,8 @@ export default function App() {
     setBenchmarkError(null)
     setJudgeScores([])
     setJudgeError(null)
+    setVotes({})
+    setRegenerating(new Set())
 
     try {
       const res = await fetch('/api/benchmark', {
@@ -136,6 +141,39 @@ export default function App() {
       setBenchmarkError(err.message)
     } finally {
       setBenchmarking(false)
+    }
+  }
+
+  function handleVote(modelId, dir) {
+    setVotes((prev) => ({ ...prev, [modelId]: prev[modelId] === dir ? null : dir }))
+  }
+
+  async function regenerateModel(modelId) {
+    if (regenerating.has(modelId)) return
+    setRegenerating((prev) => new Set([...prev, modelId]))
+    setJudgeScores((prev) => prev.filter((s) => s.model_id !== modelId))
+    setVotes((prev) => { const next = { ...prev }; delete next[modelId]; return next })
+
+    try {
+      const res = await fetch('/api/benchmark', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          models: [modelId],
+          prompt: prompt.trim(),
+          system_prompt: showSystemPrompt && systemPrompt.trim() ? systemPrompt.trim() : undefined,
+        }),
+      })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        throw new Error(data.detail || `HTTP ${res.status}`)
+      }
+      const data = await res.json()
+      setResults((prev) => prev.map((r) => r.model_id === modelId ? data.results[0] : r))
+    } catch (err) {
+      setResults((prev) => prev.map((r) => r.model_id === modelId ? { ...r, content: null, error: err.message } : r))
+    } finally {
+      setRegenerating((prev) => { const next = new Set(prev); next.delete(modelId); return next })
     }
   }
 
@@ -277,6 +315,10 @@ export default function App() {
                         result={result}
                         judgeScores={scoreMap[result.model_id]}
                         isWinner={!!winnerId && result.model_id === winnerId}
+                        vote={votes[result.model_id] ?? null}
+                        onVote={(dir) => handleVote(result.model_id, dir)}
+                        isRegenerating={regenerating.has(result.model_id)}
+                        onRegenerate={() => regenerateModel(result.model_id)}
                       />
                     ))}
                   </div>
