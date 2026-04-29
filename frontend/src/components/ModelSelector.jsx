@@ -1,6 +1,6 @@
 const MAX_MODELS = 5
 
-export default function ModelSelector({ groups, selected, onChange, loading, error, onRetry }) {
+export default function ModelSelector({ groups, selected, onChange, loading, error, onRetry, failedModels = {} }) {
   const isMaxReached = selected.length >= MAX_MODELS
 
   function toggle(modelId) {
@@ -78,14 +78,18 @@ export default function ModelSelector({ groups, selected, onChange, loading, err
                 {group.models.map((model) => {
                   const isSelected = selected.includes(model.id)
                   const isDisabled = isMaxReached && !isSelected
+                  const failure = failedModels[model.id]
                   return (
                     <label
                       key={model.id}
-                      className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-xs cursor-pointer select-none ${
+                      title={failure ? `Last run failed: ${failure.error}` : undefined}
+                      className={`relative flex items-center gap-2 px-3 py-2 rounded-lg border text-xs cursor-pointer select-none ${
                         isSelected
                           ? 'border-purple-500 bg-purple-900/20 text-purple-200'
                           : isDisabled
                           ? 'border-[#1e1e2e] bg-[#0f0f17] text-gray-600 cursor-not-allowed'
+                          : failure
+                          ? 'border-amber-900/50 hover:border-amber-700/60 text-gray-300 hover:bg-[#1a1a2e]'
                           : 'border-[#1e1e2e] hover:border-gray-600 text-gray-300 hover:bg-[#1a1a2e]'
                       }`}
                     >
@@ -119,6 +123,9 @@ export default function ModelSelector({ groups, selected, onChange, loading, err
                         )}
                       </span>
                       <span className="truncate">{model.name}</span>
+                      {failure && (
+                        <span className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0" />
+                      )}
                     </label>
                   )
                 })}

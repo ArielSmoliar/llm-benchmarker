@@ -15,6 +15,22 @@ function persistHistory(runs) {
   localStorage.setItem(HISTORY_KEY, JSON.stringify(runs))
 }
 
+const FAILED_MODELS_KEY = 'llm-benchmarker:failed-models'
+const FAILED_MODEL_TTL_MS = 24 * 60 * 60 * 1000 // 24 hours
+
+function loadFailedModels() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(FAILED_MODELS_KEY) || '{}')
+    const now = Date.now()
+    return Object.fromEntries(
+      Object.entries(raw).filter(([, v]) => now - v.ts < FAILED_MODEL_TTL_MS)
+    )
+  } catch { return {} }
+}
+function persistFailedModels(map) {
+  localStorage.setItem(FAILED_MODELS_KEY, JSON.stringify(map))
+}
+
 function getUrlParams() {
   const p = new URLSearchParams(window.location.search)
   return {
@@ -72,6 +88,8 @@ export default function App() {
   const [history, setHistory] = useState(loadHistory)
   const [showHistory, setShowHistory] = useState(false)
   const [activeRunId, setActiveRunId] = useState(null)
+
+  const [failedModels, setFailedModels] = useState(loadFailedModels)
 
   // Fetch available models on mount
   useEffect(() => {
@@ -189,6 +207,18 @@ export default function App() {
       const data = await res.json()
       setResults(data.results)
       setUrlParams(prompt.trim(), selectedModels)
+      setFailedModels((prev) => {
+        const next = { ...prev }
+        for (const r of data.results) {
+          if (r.error) {
+            next[r.model_id] = { ts: Date.now(), error: r.error }
+          } else {
+            delete next[r.model_id]
+          }
+        }
+        persistFailedModels(next)
+        return next
+      })
       const run = {
         id: Date.now(),
         timestamp: new Date().toISOString(),
@@ -327,6 +357,7 @@ export default function App() {
             loading={loadingModels}
             error={modelsError}
             onRetry={fetchModels}
+            failedModels={failedModels}
           />
 
           <PromptInput
