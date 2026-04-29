@@ -111,7 +111,7 @@ npm run dev   # proxies /api/* to http://localhost:8000
 
 ## Feedback & contributions
 
-Open an issue or start a discussion at [GitHub Discussions](https://github.com/ArielSmoliar/llm-benchmarker/discussions).
+Open an issue at [GitHub Issues](https://github.com/ArielSmoliar/llm-benchmarker/issues).
 
 ---
 
