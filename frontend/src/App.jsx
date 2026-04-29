@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import ModelSelector from './components/ModelSelector'
 import PromptInput from './components/PromptInput'
 import ResultCard from './components/ResultCard'
-import LatencyChart from './components/LatencyChart'
+import LatencyChart, { TokenChart } from './components/LatencyChart'
 
 const STORAGE_KEY = 'llm-benchmarker:selected-models'
 const HISTORY_KEY = 'llm-benchmarker:run-history'
@@ -460,6 +460,7 @@ export default function App() {
               })()}
 
               <LatencyChart results={results} />
+              <TokenChart results={results} />
             </section>
           )}
 
