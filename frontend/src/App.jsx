@@ -73,8 +73,12 @@ export default function App() {
   const [systemPrompt, setSystemPrompt] = useState('')
   const [showSystemPrompt, setShowSystemPrompt] = useState(false)
 
+  const [temperature, setTemperature] = useState(0.7)
+  const [maxTokens, setMaxTokens] = useState(1024)
+
   const [benchmarking, setBenchmarking] = useState(false)
   const [results, setResults] = useState([])
+  const [streamingModels, setStreamingModels] = useState(new Set())
   const [benchmarkError, setBenchmarkError] = useState(null)
 
   const [votes, setVotes] = useState({}) // { [model_id]: 'up' | 'down' | null }
@@ -183,38 +187,80 @@ export default function App() {
   async function runBenchmark() {
     if (!prompt.trim() || selectedModels.length === 0 || benchmarking) return
     setBenchmarking(true)
-    setResults([])
     setBenchmarkError(null)
     setJudgeScores([])
     setJudgeError(null)
     setVotes({})
     setRegenerating(new Set())
 
+    // Show empty cards immediately
+    const resultMap = Object.fromEntries(
+      selectedModels.map((id) => [id, { model_id: id, content: '', latency_ms: null, prompt_tokens: null, completion_tokens: null, total_tokens: null, error: null }])
+    )
+    setResults(Object.values(resultMap))
+    setStreamingModels(new Set(selectedModels))
+
     try {
-      const res = await fetch('/api/benchmark', {
+      const res = await fetch('/api/benchmark/stream', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           models: selectedModels,
           prompt: prompt.trim(),
           system_prompt: showSystemPrompt && systemPrompt.trim() ? systemPrompt.trim() : undefined,
+          temperature,
+          max_tokens: maxTokens,
         }),
       })
       if (!res.ok) {
         const data = await res.json().catch(() => ({}))
         throw new Error(data.detail || `HTTP ${res.status}`)
       }
-      const data = await res.json()
-      setResults(data.results)
+
+      const reader = res.body.getReader()
+      const decoder = new TextDecoder()
+      let buffer = ''
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        buffer += decoder.decode(value, { stream: true })
+        const lines = buffer.split('\n')
+        buffer = lines.pop()
+
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue
+          const raw = line.slice(6).trim()
+          if (raw === '[DONE]') continue
+          let event
+          try { event = JSON.parse(raw) } catch { continue }
+
+          if (!event.done && event.chunk) {
+            resultMap[event.model_id].content = (resultMap[event.model_id].content || '') + event.chunk
+            setResults(Object.values(resultMap).map((r) => ({ ...r })))
+          } else if (event.done) {
+            resultMap[event.model_id] = {
+              ...resultMap[event.model_id],
+              latency_ms: event.latency_ms ?? null,
+              prompt_tokens: event.usage?.prompt_tokens ?? null,
+              completion_tokens: event.usage?.completion_tokens ?? null,
+              total_tokens: event.usage?.total_tokens ?? null,
+              error: event.error ?? null,
+              content: event.error ? null : resultMap[event.model_id].content,
+            }
+            setResults(Object.values(resultMap).map((r) => ({ ...r })))
+            setStreamingModels((prev) => { const next = new Set(prev); next.delete(event.model_id); return next })
+          }
+        }
+      }
+
+      const finalResults = Object.values(resultMap)
       setUrlParams(prompt.trim(), selectedModels)
       setFailedModels((prev) => {
         const next = { ...prev }
-        for (const r of data.results) {
-          if (r.error) {
-            next[r.model_id] = { ts: Date.now(), error: r.error }
-          } else {
-            delete next[r.model_id]
-          }
+        for (const r of finalResults) {
+          if (r.error) next[r.model_id] = { ts: Date.now(), error: r.error }
+          else delete next[r.model_id]
         }
         persistFailedModels(next)
         return next
@@ -225,7 +271,7 @@ export default function App() {
         prompt: prompt.trim(),
         systemPrompt: showSystemPrompt ? systemPrompt.trim() : '',
         models: selectedModels,
-        results: data.results,
+        results: finalResults,
         judgeScores: [],
       }
       setActiveRunId(run.id)
@@ -236,8 +282,10 @@ export default function App() {
       })
     } catch (err) {
       setBenchmarkError(err.message)
+      setStreamingModels(new Set())
     } finally {
       setBenchmarking(false)
+      setStreamingModels(new Set())
     }
   }
 
@@ -259,6 +307,8 @@ export default function App() {
           models: [modelId],
           prompt: prompt.trim(),
           system_prompt: showSystemPrompt && systemPrompt.trim() ? systemPrompt.trim() : undefined,
+          temperature,
+          max_tokens: maxTokens,
         }),
       })
       if (!res.ok) {
@@ -367,6 +417,10 @@ export default function App() {
             onSystemPromptChange={setSystemPrompt}
             showSystemPrompt={showSystemPrompt}
             onToggleSystemPrompt={() => setShowSystemPrompt((v) => !v)}
+            temperature={temperature}
+            onTemperatureChange={setTemperature}
+            maxTokens={maxTokens}
+            onMaxTokensChange={setMaxTokens}
           />
 
           {/* Run button */}
@@ -453,6 +507,7 @@ export default function App() {
                         onVote={(dir) => handleVote(result.model_id, dir)}
                         isRegenerating={regenerating.has(result.model_id)}
                         onRegenerate={() => regenerateModel(result.model_id)}
+                        isStreaming={streamingModels.has(result.model_id)}
                       />
                     ))}
                   </div>
@@ -464,22 +519,6 @@ export default function App() {
             </section>
           )}
 
-          {/* Loading skeleton cards */}
-          {benchmarking && selectedModels.length > 0 && (
-            <section className="space-y-6">
-              <div className="flex items-center gap-2">
-                <div className="w-2 h-2 rounded-full bg-purple-500 animate-ping" />
-                <span className="text-xs text-gray-500">
-                  Querying {selectedModels.length} model{selectedModels.length > 1 ? 's' : ''} in parallel…
-                </span>
-              </div>
-              <div className={`grid gap-4 ${gridClass(selectedModels.length)}`}>
-                {selectedModels.map((id) => (
-                  <SkeletonCard key={id} modelId={id} />
-                ))}
-              </div>
-            </section>
-          )}
         </main>
 
         <HistoryDrawer

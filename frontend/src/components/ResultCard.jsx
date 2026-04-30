@@ -2,7 +2,7 @@ import { useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 
-export default function ResultCard({ result, judgeScores, isWinner, vote, onVote, isRegenerating, onRegenerate }) {
+export default function ResultCard({ result, judgeScores, isWinner, vote, onVote, isRegenerating, onRegenerate, isStreaming }) {
   const [copied, setCopied] = useState(false)
 
   async function copyToClipboard() {
@@ -171,6 +171,9 @@ export default function ResultCard({ result, judgeScores, isWinner, vote, onVote
             <ReactMarkdown remarkPlugins={[remarkGfm]}>
               {result.content}
             </ReactMarkdown>
+            {isStreaming && (
+              <span className="inline-block w-2 h-4 bg-purple-400 ml-0.5 align-middle animate-pulse" />
+            )}
           </div>
         )}
       </div>

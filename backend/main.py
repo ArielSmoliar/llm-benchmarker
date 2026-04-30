@@ -70,6 +70,8 @@ class BenchmarkRequest(BaseModel):
     models: List[str]
     prompt: str
     system_prompt: Optional[str] = None
+    temperature: float = 0.7
+    max_tokens: int = 1024
 
 
 class ModelResult(BaseModel):
@@ -87,6 +89,8 @@ async def call_model(
     api_key: str,
     model_id: str,
     messages: list,
+    temperature: float = 0.7,
+    max_tokens: int = 1024,
 ) -> ModelResult:
     start = time.perf_counter()
     try:
@@ -99,8 +103,8 @@ async def call_model(
             json={
                 "model": model_id,
                 "messages": messages,
-                "max_tokens": 1024,
-                "temperature": 0.7,
+                "max_tokens": max_tokens,
+                "temperature": temperature,
             },
             timeout=REQUEST_TIMEOUT,
         )
@@ -193,7 +197,7 @@ async def benchmark(request: BenchmarkRequest):
 
     async with httpx.AsyncClient() as client:
         tasks = [
-            call_model(client, api_key, model_id, messages)
+            call_model(client, api_key, model_id, messages, request.temperature, request.max_tokens)
             for model_id in request.models
         ]
         raw_results = await asyncio.gather(*tasks, return_exceptions=True)
@@ -369,6 +373,135 @@ async def judge(request: JudgeRequest):
         scores = await call_judge(client, api_key, request.judge_model, request.prompt, request.results)
 
     return {"scores": [s.model_dump() for s in scores]}
+
+
+async def stream_model(
+    api_key: str,
+    model_id: str,
+    messages: list,
+    temperature: float,
+    max_tokens: int,
+):
+    """Async generator that yields SSE-ready dicts for one model."""
+    start = time.perf_counter()
+    try:
+        async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT) as client:
+            async with client.stream(
+                "POST",
+                f"{NVIDIA_API_BASE}/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "model": model_id,
+                    "messages": messages,
+                    "max_tokens": max_tokens,
+                    "temperature": temperature,
+                    "stream": True,
+                },
+            ) as resp:
+                if resp.status_code != 200:
+                    await resp.aread()
+                    elapsed_ms = round((time.perf_counter() - start) * 1000, 1)
+                    if resp.status_code == 429:
+                        error = "Rate limit exceeded — try again in a moment."
+                    elif resp.status_code == 401:
+                        error = "Authentication failed — check your NVIDIA_API_KEY."
+                    elif resp.status_code == 404:
+                        error = "Model not available on your account."
+                    elif resp.status_code == 422:
+                        error = "Model does not support chat completions."
+                    elif resp.status_code == 400:
+                        try:
+                            detail = resp.json().get("detail", "")
+                        except Exception:
+                            detail = ""
+                        error = "Model is currently degraded — try again later." if "DEGRADED" in detail else f"Bad request: {detail[:120]}"
+                    else:
+                        error = f"API error {resp.status_code}"
+                    yield {"model_id": model_id, "done": True, "error": error, "latency_ms": elapsed_ms}
+                    return
+
+                usage: dict = {}
+                async for line in resp.aiter_lines():
+                    if not line.startswith("data: "):
+                        continue
+                    data = line[6:]
+                    if data.strip() == "[DONE]":
+                        break
+                    try:
+                        chunk = json.loads(data)
+                        delta = chunk["choices"][0]["delta"].get("content", "")
+                        if delta:
+                            yield {"model_id": model_id, "chunk": delta, "done": False}
+                        if chunk.get("usage"):
+                            usage = chunk["usage"]
+                    except (json.JSONDecodeError, KeyError, IndexError):
+                        continue
+
+                elapsed_ms = round((time.perf_counter() - start) * 1000, 1)
+                yield {
+                    "model_id": model_id,
+                    "done": True,
+                    "latency_ms": elapsed_ms,
+                    "usage": usage,
+                }
+
+    except httpx.TimeoutException:
+        elapsed_ms = round((time.perf_counter() - start) * 1000, 1)
+        yield {"model_id": model_id, "done": True, "error": "Request timed out after 60 s.", "latency_ms": elapsed_ms}
+    except Exception as exc:
+        elapsed_ms = round((time.perf_counter() - start) * 1000, 1)
+        yield {"model_id": model_id, "done": True, "error": str(exc), "latency_ms": elapsed_ms}
+
+
+@app.post("/api/benchmark/stream")
+async def benchmark_stream(request: BenchmarkRequest):
+    if not request.models:
+        raise HTTPException(status_code=400, detail="At least one model required")
+    if len(request.models) > 5:
+        raise HTTPException(status_code=400, detail="Maximum 5 models allowed")
+    if not request.prompt.strip():
+        raise HTTPException(status_code=400, detail="Prompt cannot be empty")
+
+    api_key = get_api_key()
+    messages = []
+    if request.system_prompt and request.system_prompt.strip():
+        messages.append({"role": "system", "content": request.system_prompt.strip()})
+    messages.append({"role": "user", "content": request.prompt.strip()})
+
+    async def generate():
+        queue: asyncio.Queue = asyncio.Queue()
+        n = len(request.models)
+
+        async def producer(model_id: str):
+            async for event in stream_model(api_key, model_id, messages, request.temperature, request.max_tokens):
+                await queue.put(event)
+            await queue.put({"__sentinel__": True})
+
+        tasks = [asyncio.create_task(producer(m)) for m in request.models]
+        finished = 0
+        try:
+            while finished < n:
+                event = await asyncio.wait_for(queue.get(), timeout=REQUEST_TIMEOUT + 5)
+                if event.get("__sentinel__"):
+                    finished += 1
+                    continue
+                yield f"data: {json.dumps(event)}\n\n"
+        except asyncio.TimeoutError:
+            pass
+        finally:
+            for t in tasks:
+                t.cancel()
+        yield "data: [DONE]\n\n"
+
+    from fastapi.responses import StreamingResponse
+    return StreamingResponse(
+        generate(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 @app.get("/health")
