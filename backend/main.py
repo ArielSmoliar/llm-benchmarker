@@ -130,6 +130,16 @@ async def call_model(
                 error="Model does not support chat completions.",
                 latency_ms=elapsed_ms,
             )
+        if resp.status_code == 400:
+            try:
+                detail = resp.json().get("detail", "")
+            except Exception:
+                detail = ""
+            if "DEGRADED" in detail:
+                msg = "Model is currently degraded on NVIDIA's infrastructure — try again later."
+            else:
+                msg = f"Bad request: {detail[:120]}" if detail else "Bad request (400)."
+            return ModelResult(model_id=model_id, error=msg, latency_ms=elapsed_ms)
 
         resp.raise_for_status()
         data = resp.json()

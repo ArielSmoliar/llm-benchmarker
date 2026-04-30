@@ -108,7 +108,7 @@ export function TokenChart({ results }) {
 }
 
 export default function LatencyChart({ results }) {
-  const valid = results.filter((r) => r.latency_ms != null)
+  const valid = results.filter((r) => r.latency_ms != null && !r.error)
   if (valid.length < 2) return null
 
   const sorted = [...valid].sort((a, b) => a.latency_ms - b.latency_ms)
