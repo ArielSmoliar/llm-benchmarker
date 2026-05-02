@@ -31,12 +31,16 @@ An open-source tool for comparing AI model responses side-by-side. Select up to 
 ### Model health
 - **Failed model indicators**: models that error in a benchmark get an amber dot and border in the selector; hovering shows the last error message; the flag clears automatically when the model succeeds and expires after 24 hours
 
+### AI-powered model selection
+- **Help me choose models**: a prominent CTA button above the model selector opens an inline panel; describe your use case and Claude recommends 4 models from the full available list with a one-sentence reason for each pick and a selection strategy summary; click "Select these models" to auto-fill the selector and run
+
 ---
 
 ## Prerequisites
 
 - [Docker Desktop](https://www.docker.com/products/docker-desktop/) (includes Docker Compose)
 - A free NVIDIA API key. Get one at [build.nvidia.com/models](https://build.nvidia.com/models)
+- An Anthropic API key for the model recommender. Get one at [console.anthropic.com](https://console.anthropic.com)
 
 ---
 
@@ -49,7 +53,9 @@ cd llm-benchmarker
 
 # 2. Add your NVIDIA API key
 cp .env.example .env
-# Edit .env and set NVIDIA_API_KEY=your_key_here
+# Edit .env and set both keys:
+# NVIDIA_API_KEY=your_nvidia_key_here
+# ANTHROPIC_API_KEY=your_anthropic_key_here
 
 # 3. Start the app
 docker compose up --build
@@ -97,7 +103,8 @@ npm run dev   # proxies /api/* to http://localhost:8000
 |---|---|
 | Frontend | React 18, Vite 5, Tailwind CSS 3 |
 | Backend | Python FastAPI, httpx (async) |
-| API | NVIDIA NIM (OpenAI-compatible) |
+| Benchmark API | NVIDIA NIM (OpenAI-compatible) |
+| Recommender AI | Anthropic SDK (claude-sonnet-4-6) |
 | Infra | Docker Compose: nginx serves React, proxies `/api/*` to FastAPI |
 
 ---
