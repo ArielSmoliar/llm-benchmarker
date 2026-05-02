@@ -5,12 +5,14 @@ An open-source tool for comparing AI model responses side-by-side. Select up to 
 ## Features
 
 ### Core benchmark
-- **Side-by-side comparison**: run up to 5 models simultaneously, results appear in parallel
+- **Streaming responses**: result cards appear immediately and text streams in token-by-token with a live cursor; all models stream in parallel
+- **Side-by-side comparison**: run up to 5 models simultaneously
 - **Markdown rendering**: responses render with full formatting (headers, code blocks, lists)
-- **Latency chart**: color-coded bar chart (green / amber / red) sorted fastest-first
+- **Latency chart**: color-coded bar chart (green / amber / red) sorted fastest-first; failed models excluded
 - **Token usage chart**: completion tokens per model sorted fewest-first, with tokens/sec and an efficiency recommendation when one model uses 25% fewer tokens than average
 - **Per-card token counts**: prompt, completion, and total tokens on each result card
 - **System prompt toggle**: optionally prepend a system prompt to every model call
+- **Temperature and max tokens**: Settings panel in the prompt area exposes a temperature slider (0.0 precise to 1.0 creative) and a max tokens slider (256 to 4096); applied to all model calls including regenerate
 - **Model selection persisted**: your last selection is saved to localStorage automatically
 
 ### Evaluation
@@ -62,8 +64,8 @@ Open **http://localhost:3000** in your browser.
 ## Usage
 
 1. **Select models**: pick up to 5 from the panel (grouped by provider); models that failed in previous runs show an amber warning dot
-2. **Write your prompt**: optionally enable a system prompt via the toggle
-3. **Run Benchmark**: all models are queried in parallel; results appear with latency, token counts, and comparison charts
+2. **Write your prompt**: optionally enable a system prompt via the toggle; click **Settings** to adjust temperature and max tokens
+3. **Run Benchmark**: result cards appear immediately and stream token-by-token; latency and token charts update when all models finish
 4. **Auto-evaluate**: click **Evaluate** in the panel above the results to score all responses with a judge model
 5. **Vote or regenerate**: use thumbs up/down to rate responses, or click the regenerate button on any card to re-run just that model
 6. **Share**: click **Copy link** next to the Results header to copy a URL that restores your prompt and model selection
@@ -102,8 +104,8 @@ npm run dev   # proxies /api/* to http://localhost:8000
 
 ## Roadmap
 
-- [ ] Streaming responses (token-by-token rendering)
-- [ ] Temperature / max_tokens sliders per run
+- [x] Streaming responses (token-by-token rendering)
+- [x] Temperature / max_tokens sliders per run
 - [ ] Batch / CSV eval: upload a file of prompts and run them all
 - [ ] SQLite persistence for run history
 
