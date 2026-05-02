@@ -3,3 +3,4 @@ uvicorn[standard]==0.32.1
 httpx==0.27.2
 pydantic==2.10.3
 python-dotenv==1.0.1
+anthropic==0.49.0

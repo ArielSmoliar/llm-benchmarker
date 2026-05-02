@@ -5,6 +5,7 @@ import re
 import time
 from typing import List, Optional
 
+import anthropic
 import httpx
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -502,6 +503,71 @@ async def benchmark_stream(request: BenchmarkRequest):
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
+
+
+class RecommendRequest(BaseModel):
+    use_case: str
+    models: List[dict]  # [{ id, name, provider }]
+
+
+@app.post("/api/recommend")
+async def recommend(request: RecommendRequest):
+    if not request.use_case.strip():
+        raise HTTPException(status_code=400, detail="use_case is required")
+    if not request.models:
+        raise HTTPException(status_code=400, detail="models list is required")
+
+    anthropic_key = os.environ.get("ANTHROPIC_API_KEY", "").strip()
+    if not anthropic_key:
+        raise HTTPException(status_code=500, detail="ANTHROPIC_API_KEY is not configured")
+
+    model_list = "\n".join(
+        f"- {m['id']} (provider: {m.get('provider', 'unknown')})"
+        for m in request.models
+    )
+
+    prompt = f"""You are an expert in large language models and their capabilities.
+
+A user wants to benchmark LLMs for the following use case:
+\"\"\"{request.use_case.strip()}\"\"\"
+
+Here are the available models:
+{model_list}
+
+Select the 4 most suitable models for this use case. Consider factors like:
+- Model size and capability for the task type
+- Provider diversity (prefer a mix of providers when possible)
+- Known strengths (coding, reasoning, conversation, instruction-following, etc.)
+
+Respond with ONLY valid JSON in this exact schema — no markdown, no explanation outside the JSON:
+{{
+  "recommendations": [
+    {{
+      "model_id": "<exact model id from the list>",
+      "reason": "<one sentence explaining why this model fits the use case>"
+    }}
+  ],
+  "summary": "<one sentence overview of your selection strategy>"
+}}"""
+
+    client = anthropic.Anthropic(api_key=anthropic_key)
+    message = client.messages.create(
+        model="claude-sonnet-4-6",
+        max_tokens=1024,
+        messages=[{"role": "user", "content": prompt}],
+    )
+
+    raw = message.content[0].text
+    try:
+        parsed = _extract_json(raw)
+    except ValueError:
+        raise HTTPException(status_code=500, detail="Claude returned unparseable JSON")
+
+    # Validate that recommended model_ids actually exist in the provided list
+    valid_ids = {m["id"] for m in request.models}
+    recs = [r for r in parsed.get("recommendations", []) if r.get("model_id") in valid_ids]
+
+    return {"recommendations": recs, "summary": parsed.get("summary", "")}
 
 
 @app.get("/health")

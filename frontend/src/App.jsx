@@ -95,6 +95,12 @@ export default function App() {
 
   const [failedModels, setFailedModels] = useState(loadFailedModels)
 
+  const [showRecommender, setShowRecommender] = useState(false)
+  const [useCase, setUseCase] = useState('')
+  const [recommending, setRecommending] = useState(false)
+  const [recommendations, setRecommendations] = useState(null)
+  const [recommendError, setRecommendError] = useState(null)
+
   // Fetch available models on mount
   useEffect(() => {
     fetchModels()
@@ -347,6 +353,42 @@ export default function App() {
     if (activeRunId === id) setActiveRunId(null)
   }
 
+  async function runRecommend() {
+    if (!useCase.trim() || recommending) return
+    setRecommending(true)
+    setRecommendations(null)
+    setRecommendError(null)
+    try {
+      const allModels = modelGroups.flatMap((g) =>
+        g.models.map((m) => ({ id: m.id, name: m.name, provider: g.provider }))
+      )
+      const res = await fetch('/api/recommend', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ use_case: useCase, models: allModels }),
+      })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        throw new Error(data.detail || `HTTP ${res.status}`)
+      }
+      const data = await res.json()
+      setRecommendations(data)
+    } catch (err) {
+      setRecommendError(err.message)
+    } finally {
+      setRecommending(false)
+    }
+  }
+
+  function applyRecommendations() {
+    if (!recommendations) return
+    const ids = recommendations.recommendations.map((r) => r.model_id).slice(0, 5)
+    setSelectedModels(ids)
+    setShowRecommender(false)
+    setRecommendations(null)
+    setUseCase('')
+  }
+
   const canRun = !benchmarking && selectedModels.length > 0 && prompt.trim().length > 0
 
   return (
@@ -400,6 +442,37 @@ export default function App() {
         </header>
 
         <main className="flex-1 max-w-7xl mx-auto w-full px-6 py-8 space-y-6">
+          {/* Help me choose CTA */}
+          {!showRecommender && (
+            <div className="flex items-center justify-between">
+              <div />
+              <button
+                onClick={() => setShowRecommender(true)}
+                disabled={loadingModels || modelGroups.length === 0}
+                className="inline-flex items-center gap-2 px-5 py-2.5 bg-purple-600 hover:bg-purple-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-medium rounded-lg shadow-lg shadow-purple-900/30"
+              >
+                <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                </svg>
+                Help me choose models
+              </button>
+            </div>
+          )}
+
+          {/* Recommender panel */}
+          {showRecommender && (
+            <RecommenderPanel
+              useCase={useCase}
+              onUseCaseChange={setUseCase}
+              onSubmit={runRecommend}
+              onClose={() => { setShowRecommender(false); setRecommendations(null); setUseCase('') }}
+              recommending={recommending}
+              recommendations={recommendations}
+              recommendError={recommendError}
+              onApply={applyRecommendations}
+            />
+          )}
+
           <ModelSelector
             groups={modelGroups}
             selected={selectedModels}
@@ -547,6 +620,89 @@ export default function App() {
           </div>
         </footer>
       </div>
+    </div>
+  )
+}
+
+function RecommenderPanel({ useCase, onUseCaseChange, onSubmit, onClose, recommending, recommendations, recommendError, onApply }) {
+  return (
+    <div className="bg-[#13131a] border border-purple-800/40 rounded-xl p-6 space-y-4">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <p className="text-sm font-semibold text-white">Help me choose models</p>
+          <p className="text-[11px] text-gray-500 mt-0.5">
+            Describe what you are building and Claude will recommend the best models to benchmark
+          </p>
+        </div>
+        <button onClick={onClose} className="text-gray-600 hover:text-gray-300 flex-shrink-0 mt-0.5">
+          <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
+
+      <div className="flex gap-3">
+        <input
+          type="text"
+          value={useCase}
+          onChange={(e) => onUseCaseChange(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && onSubmit()}
+          placeholder="e.g. customer support bot, code review assistant, creative writing tool..."
+          disabled={recommending}
+          className="flex-1 bg-[#0a0a0f] border border-[#1e1e2e] rounded-lg px-4 py-2.5 text-sm text-gray-300 placeholder-gray-700 focus:outline-none focus:border-purple-600 disabled:opacity-40"
+        />
+        <button
+          onClick={onSubmit}
+          disabled={!useCase.trim() || recommending}
+          className="inline-flex items-center gap-2 px-5 py-2.5 bg-purple-600 hover:bg-purple-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-medium rounded-lg whitespace-nowrap"
+        >
+          {recommending ? (
+            <>
+              <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24" fill="none">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+              </svg>
+              Thinking...
+            </>
+          ) : 'Recommend'}
+        </button>
+      </div>
+
+      {recommendError && (
+        <p className="text-xs text-red-400">Error: {recommendError}</p>
+      )}
+
+      {recommendations && (
+        <div className="space-y-3">
+          {recommendations.summary && (
+            <p className="text-[11px] text-gray-500 italic">{recommendations.summary}</p>
+          )}
+          <div className="space-y-2">
+            {recommendations.recommendations.map((rec) => {
+              const parts = rec.model_id.split('/')
+              const name = parts[parts.length - 1]
+              const provider = parts.length > 1 ? parts[0] : null
+              return (
+                <div key={rec.model_id} className="flex items-start gap-3 p-3 bg-[#0d0d15] border border-[#1e1e2e] rounded-lg">
+                  <div className="flex-1 min-w-0">
+                    {provider && (
+                      <p className="text-[10px] font-mono uppercase tracking-wider text-gray-600">{provider}</p>
+                    )}
+                    <p className="text-sm font-medium text-white">{name}</p>
+                    <p className="text-[11px] text-gray-500 mt-0.5 leading-relaxed">{rec.reason}</p>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+          <button
+            onClick={onApply}
+            className="w-full py-2.5 bg-purple-600 hover:bg-purple-500 text-white text-sm font-medium rounded-lg"
+          >
+            Select these models
+          </button>
+        </div>
+      )}
     </div>
   )
 }
