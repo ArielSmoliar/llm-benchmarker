@@ -2,6 +2,16 @@
 
 An open-source tool for comparing AI model responses side-by-side. Select up to 5 models, enter a prompt, and instantly see responses with latency, token counts, judge scores, and efficiency recommendations. All running locally, no accounts required beyond an NVIDIA API key.
 
+## Screenshots
+
+**Model selector with AI-powered recommendations:**
+![Model selector showing Help me choose models CTA and provider-grouped model list](docs/llm_benchmarker1.png)
+
+**Result card with judge scores and Best badge:**
+![Result card showing accuracy, clarity, and conciseness scores with Best winner badge](docs/llm_benchmarker2.png)
+
+---
+
 ## Features
 
 ### Core benchmark
