@@ -1,4 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 import ModelSelector from './components/ModelSelector'
 import PromptInput from './components/PromptInput'
 import ResultCard from './components/ResultCard'
@@ -101,6 +103,10 @@ export default function App() {
   const [recommendations, setRecommendations] = useState(null)
   const [recommendError, setRecommendError] = useState(null)
 
+  const [analyzing, setAnalyzing] = useState(false)
+  const [analysis, setAnalysis] = useState(null)
+  const [analysisError, setAnalysisError] = useState(null)
+
   // Fetch available models on mount
   useEffect(() => {
     fetchModels()
@@ -198,6 +204,8 @@ export default function App() {
     setJudgeError(null)
     setVotes({})
     setRegenerating(new Set())
+    setAnalysis(null)
+    setAnalysisError(null)
 
     // Show empty cards immediately
     const resultMap = Object.fromEntries(
@@ -380,6 +388,34 @@ export default function App() {
     }
   }
 
+  async function runAnalysis() {
+    if (analyzing || results.length === 0) return
+    setAnalyzing(true)
+    setAnalysis(null)
+    setAnalysisError(null)
+    try {
+      const res = await fetch('/api/analyze', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          prompt: prompt.trim(),
+          results,
+          judge_scores: judgeScores.length > 0 ? judgeScores : null,
+        }),
+      })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        throw new Error(data.detail || `HTTP ${res.status}`)
+      }
+      const data = await res.json()
+      setAnalysis(data.analysis)
+    } catch (err) {
+      setAnalysisError(err.message)
+    } finally {
+      setAnalyzing(false)
+    }
+  }
+
   function applyRecommendations() {
     if (!recommendations) return
     const ids = recommendations.recommendations.map((r) => r.model_id).slice(0, 5)
@@ -547,6 +583,10 @@ export default function App() {
                 <CopyLinkButton />
               </div>
 
+              {/* Performance charts — shown as soon as models finish */}
+              <LatencyChart results={results} />
+              <TokenChart results={results} />
+
               {/* Judge panel */}
               <JudgePanel
                 modelGroups={modelGroups}
@@ -587,8 +627,27 @@ export default function App() {
                 )
               })()}
 
-              <LatencyChart results={results} />
-              <TokenChart results={results} />
+              {/* Benchmark Analyst — below result cards */}
+              {!analyzing && !analysis && !analysisError && streamingModels.size === 0 && (
+                <div className="flex justify-center">
+                  <button
+                    onClick={runAnalysis}
+                    disabled={benchmarking}
+                    className="inline-flex items-center gap-2 px-6 py-2.5 bg-[#13131a] hover:bg-[#1a1a2e] border border-purple-800/50 text-purple-300 text-sm font-medium rounded-lg disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                    </svg>
+                    Analyze with Claude
+                  </button>
+                </div>
+              )}
+              <AnalysisPanel
+                analyzing={analyzing}
+                analysis={analysis}
+                analysisError={analysisError}
+                onReanalyze={runAnalysis}
+              />
             </section>
           )}
 
@@ -905,6 +964,58 @@ function JudgePanel({ modelGroups, judgeModel, onJudgeModelChange, onEvaluate, j
         <p className="mt-2 text-xs text-red-400">
           Judge error: {judgeError}
         </p>
+      )}
+    </div>
+  )
+}
+
+function AnalysisPanel({ analyzing, analysis, analysisError, onReanalyze }) {
+  if (!analyzing && !analysis && !analysisError) return null
+
+  return (
+    <div className="bg-[#13131a] border border-purple-800/30 rounded-xl p-6">
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2">
+          <svg className="w-4 h-4 text-purple-400" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+          </svg>
+          <p className="text-sm font-semibold text-white">Benchmark Analysis</p>
+          <span className="text-[10px] font-mono text-purple-500 bg-purple-950/40 px-1.5 py-0.5 rounded">Claude</span>
+        </div>
+        {analysis && !analyzing && (
+          <button
+            onClick={onReanalyze}
+            className="text-[11px] text-gray-600 hover:text-gray-300"
+          >
+            Re-analyze
+          </button>
+        )}
+      </div>
+
+      {analyzing && (
+        <div className="flex items-center gap-3 py-6 justify-center">
+          <svg className="animate-spin h-4 w-4 text-purple-400" viewBox="0 0 24 24" fill="none">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+          </svg>
+          <span className="text-sm text-gray-400">Analyzing with Claude — looking up model specs and pricing…</span>
+        </div>
+      )}
+
+      {analysisError && (
+        <p className="text-xs text-red-400">Analysis error: {analysisError}</p>
+      )}
+
+      {analysis && (
+        <div className="prose prose-invert prose-sm max-w-none
+          prose-headings:text-white prose-headings:font-semibold
+          prose-p:text-gray-300 prose-p:leading-relaxed
+          prose-strong:text-white
+          prose-li:text-gray-300
+          prose-code:text-purple-300 prose-code:bg-purple-950/30 prose-code:px-1 prose-code:rounded
+          prose-hr:border-[#1e1e2e]">
+          <ReactMarkdown remarkPlugins={[remarkGfm]}>{analysis}</ReactMarkdown>
+        </div>
       )}
     </div>
   )

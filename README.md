@@ -44,6 +44,18 @@ An open-source tool for comparing AI model responses side-by-side. Select up to 
 ### AI-powered model selection
 - **Help me choose models**: a prominent CTA button above the model selector opens an inline panel; describe your use case and Claude recommends 4 models from the full available list with a one-sentence reason for each pick and a selection strategy summary; click "Select these models" to auto-fill the selector and run
 
+### Benchmark Analyst (Claude agent)
+- **Analyze with Claude**: after a benchmark run, click "Analyze with Claude" below the result cards; a multi-step Claude agent looks up context window sizes and approximate pricing for each model via tool calls, then produces a structured markdown report covering performance summary, cost analysis, model trade-offs, and scenario-based recommendations
+- **Agent-powered**: uses the Anthropic SDK tool-use loop; Claude autonomously decides which model specs and pricing to fetch, executes multiple tool calls in parallel, and synthesizes everything into a report
+- **Cost estimates**: shows estimated cost per 1,000 runs for each model based on token usage and approximate NVIDIA NIM rates (clearly noted as approximate)
+
+**Benchmark Analysis report:**
+![Benchmark Analysis overview showing model overview table and performance summary](docs/screenshot-analyst-overview.png)
+
+![Cost Analysis section showing pricing per model and estimated cost per 1K runs](docs/screenshot-analyst-cost.png)
+
+![Model Trade-offs and Recommendation sections with scenario-based guidance](docs/screenshot-analyst-tradeoffs.png)
+
 ---
 
 ## Prerequisites
@@ -84,8 +96,9 @@ Open **http://localhost:3000** in your browser.
 3. **Run Benchmark**: result cards appear immediately and stream token-by-token; latency and token charts update when all models finish
 4. **Auto-evaluate**: click **Evaluate** in the panel above the results to score all responses with a judge model
 5. **Vote or regenerate**: use thumbs up/down to rate responses, or click the regenerate button on any card to re-run just that model
-6. **Share**: click **Copy link** next to the Results header to copy a URL that restores your prompt and model selection
-7. **Browse history**: click **History** in the top-right to open past runs; click any entry to restore it
+6. **Analyze with Claude**: click "Analyze with Claude" below the result cards to get a full markdown report with cost estimates, trade-off analysis, and scenario-based recommendations
+7. **Share**: click **Copy link** next to the Results header to copy a URL that restores your prompt and model selection
+8. **Browse history**: click **History** in the top-right to open past runs; click any entry to restore it
 
 ---
 
@@ -114,7 +127,8 @@ npm run dev   # proxies /api/* to http://localhost:8000
 | Frontend | React 18, Vite 5, Tailwind CSS 3 |
 | Backend | Python FastAPI, httpx (async) |
 | Benchmark API | NVIDIA NIM (OpenAI-compatible) |
-| Recommender AI | Anthropic SDK (claude-sonnet-4-6) |
+| Recommender AI | Anthropic SDK (claude-sonnet-4-6), single call |
+| Benchmark Analyst | Anthropic SDK agent loop with tool use (claude-sonnet-4-6) |
 | Infra | Docker Compose: nginx serves React, proxies `/api/*` to FastAPI |
 
 ---
@@ -123,6 +137,7 @@ npm run dev   # proxies /api/* to http://localhost:8000
 
 - [x] Streaming responses (token-by-token rendering)
 - [x] Temperature / max_tokens sliders per run
+- [x] Benchmark Analyst: Claude agent with tool use for cost and trade-off analysis
 - [ ] Batch / CSV eval: upload a file of prompts and run them all
 - [ ] SQLite persistence for run history
 

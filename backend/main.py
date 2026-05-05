@@ -6,6 +6,7 @@ import time
 from typing import List, Optional
 
 import anthropic
+from anthropic import AsyncAnthropic
 import httpx
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -568,6 +569,226 @@ Respond with ONLY valid JSON in this exact schema — no markdown, no explanatio
     recs = [r for r in parsed.get("recommendations", []) if r.get("model_id") in valid_ids]
 
     return {"recommendations": recs, "summary": parsed.get("summary", "")}
+
+
+# ---------------------------------------------------------------------------
+# Benchmark Analyst — Claude agent with tool use
+# ---------------------------------------------------------------------------
+
+MODEL_SPECS: dict = {
+    "meta/llama-3.1-405b-instruct":           {"context_window": 128_000, "params": "405B"},
+    "meta/llama-3.1-70b-instruct":            {"context_window": 128_000, "params": "70B"},
+    "meta/llama-3.1-8b-instruct":             {"context_window": 128_000, "params": "8B"},
+    "meta/llama-3.2-1b-instruct":             {"context_window": 131_072, "params": "1B"},
+    "meta/llama-3.2-3b-instruct":             {"context_window": 131_072, "params": "3B"},
+    "meta/llama-3.2-11b-vision-instruct":     {"context_window": 128_000, "params": "11B"},
+    "meta/llama-3.2-90b-vision-instruct":     {"context_window": 128_000, "params": "90B"},
+    "meta/llama-3.3-70b-instruct":            {"context_window": 128_000, "params": "70B"},
+    "meta/llama-4-maverick-17b-128e-instruct":{"context_window": 128_000, "params": "17B active (128-expert MoE)"},
+    "microsoft/phi-4-mini-instruct":          {"context_window": 16_384,  "params": "4B"},
+    "microsoft/phi-4-multimodal-instruct":    {"context_window": 131_072, "params": "5.6B"},
+    "microsoft/phi-3-vision-128k-instruct":   {"context_window": 128_000, "params": "4.2B"},
+    "microsoft/phi-3.5-moe-instruct":         {"context_window": 128_000, "params": "6.6B active (42B total MoE)"},
+    "mistralai/mistral-7b-instruct-v0.3":     {"context_window": 32_768,  "params": "7B"},
+    "mistralai/mistral-large-2-instruct":     {"context_window": 128_000, "params": "123B"},
+    "mistralai/mixtral-8x7b-instruct-v0.1":   {"context_window": 32_768,  "params": "12.9B active (46.7B total MoE)"},
+    "mistralai/mixtral-8x22b-instruct-v0.1":  {"context_window": 65_536,  "params": "39B active (141B total MoE)"},
+    "mistralai/codestral-22b-instruct-v0.1":  {"context_window": 32_768,  "params": "22B"},
+    "mistralai/ministral-14b-instruct-2512":  {"context_window": 131_072, "params": "14B"},
+    "mistralai/ministral-8b-instruct-2410":   {"context_window": 131_072, "params": "8B"},
+    "nvidia/llama-3.1-nemotron-70b-instruct": {"context_window": 128_000, "params": "70B"},
+    "nvidia/llama-3.1-nemotron-nano-8b-v1":   {"context_window": 128_000, "params": "8B"},
+}
+
+# USD per million tokens (input / output) — approximate NVIDIA NIM rates
+MODEL_PRICING: dict = {
+    "meta/llama-3.1-405b-instruct":           {"input_per_m": 3.50, "output_per_m": 3.50},
+    "meta/llama-3.1-70b-instruct":            {"input_per_m": 0.30, "output_per_m": 0.30},
+    "meta/llama-3.1-8b-instruct":             {"input_per_m": 0.07, "output_per_m": 0.07},
+    "meta/llama-3.2-1b-instruct":             {"input_per_m": 0.04, "output_per_m": 0.04},
+    "meta/llama-3.2-3b-instruct":             {"input_per_m": 0.06, "output_per_m": 0.06},
+    "meta/llama-3.2-11b-vision-instruct":     {"input_per_m": 0.10, "output_per_m": 0.10},
+    "meta/llama-3.2-90b-vision-instruct":     {"input_per_m": 0.50, "output_per_m": 0.50},
+    "meta/llama-3.3-70b-instruct":            {"input_per_m": 0.30, "output_per_m": 0.30},
+    "meta/llama-4-maverick-17b-128e-instruct":{"input_per_m": 0.20, "output_per_m": 0.20},
+    "microsoft/phi-4-mini-instruct":          {"input_per_m": 0.06, "output_per_m": 0.06},
+    "microsoft/phi-4-multimodal-instruct":    {"input_per_m": 0.08, "output_per_m": 0.08},
+    "microsoft/phi-3-vision-128k-instruct":   {"input_per_m": 0.07, "output_per_m": 0.07},
+    "microsoft/phi-3.5-moe-instruct":         {"input_per_m": 0.10, "output_per_m": 0.10},
+    "mistralai/mistral-7b-instruct-v0.3":     {"input_per_m": 0.07, "output_per_m": 0.07},
+    "mistralai/mistral-large-2-instruct":     {"input_per_m": 1.00, "output_per_m": 3.00},
+    "mistralai/mixtral-8x7b-instruct-v0.1":   {"input_per_m": 0.15, "output_per_m": 0.15},
+    "mistralai/mixtral-8x22b-instruct-v0.1":  {"input_per_m": 0.65, "output_per_m": 0.65},
+    "mistralai/codestral-22b-instruct-v0.1":  {"input_per_m": 0.25, "output_per_m": 0.25},
+    "mistralai/ministral-14b-instruct-2512":  {"input_per_m": 0.15, "output_per_m": 0.15},
+    "mistralai/ministral-8b-instruct-2410":   {"input_per_m": 0.08, "output_per_m": 0.08},
+    "nvidia/llama-3.1-nemotron-70b-instruct": {"input_per_m": 0.35, "output_per_m": 0.40},
+    "nvidia/llama-3.1-nemotron-nano-8b-v1":   {"input_per_m": 0.08, "output_per_m": 0.08},
+}
+
+
+def execute_tool(name: str, inputs: dict) -> dict:
+    model_id = inputs.get("model_id", "")
+    if name == "get_model_specs":
+        if model_id in MODEL_SPECS:
+            return {"model_id": model_id, **MODEL_SPECS[model_id]}
+        return {"model_id": model_id, "error": "Specs not available for this model"}
+    if name == "get_model_pricing":
+        if model_id in MODEL_PRICING:
+            return {
+                "model_id": model_id,
+                **MODEL_PRICING[model_id],
+                "note": "Approximate rate — verify at build.nvidia.com/pricing",
+            }
+        return {"model_id": model_id, "error": "Pricing not available for this model"}
+    return {"error": f"Unknown tool: {name}"}
+
+
+ANALYST_TOOLS = [
+    {
+        "name": "get_model_specs",
+        "description": "Look up technical specs for a model: context window size and parameter count.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "model_id": {
+                    "type": "string",
+                    "description": "Full model ID, e.g. meta/llama-3.1-70b-instruct",
+                }
+            },
+            "required": ["model_id"],
+        },
+    },
+    {
+        "name": "get_model_pricing",
+        "description": "Look up approximate pricing for a model in USD per million tokens (input and output).",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "model_id": {
+                    "type": "string",
+                    "description": "Full model ID, e.g. meta/llama-3.1-70b-instruct",
+                }
+            },
+            "required": ["model_id"],
+        },
+    },
+]
+
+ANALYST_SYSTEM = """\
+You are a benchmark analyst for LLM performance. You analyze side-by-side model comparison results and provide actionable insights for AI product builders.
+
+For each analysis:
+1. Call get_model_specs and get_model_pricing for every model in the results (you can batch multiple tool calls in one turn).
+2. Synthesize the benchmark data with specs and pricing into a concise markdown report.
+
+Your report must cover these sections:
+- **Performance Summary** — latency ranking, token efficiency (completion tokens per second where available)
+- **Cost Analysis** — estimated cost per 1,000 runs based on token usage and approximate pricing (use prompt_tokens + completion_tokens); always note that pricing is approximate
+- **Model Trade-offs** — what each model does well or poorly for this specific prompt type
+- **Recommendation** — which model to use for cost-sensitive vs quality-focused scenarios
+
+Rules:
+- Be specific: cite actual latency numbers, token counts, and cost estimates
+- When citing pricing, always add "(approximate)" since get_model_pricing returns estimates
+- Keep the report under 450 words
+- If a model errored, acknowledge it briefly and exclude it from performance comparisons
+"""
+
+
+class AnalyzeRequest(BaseModel):
+    prompt: str
+    results: List[dict]
+    judge_scores: Optional[List[dict]] = None
+
+
+@app.post("/api/analyze")
+async def analyze(request: AnalyzeRequest):
+    if not request.results:
+        raise HTTPException(status_code=400, detail="results list is required")
+    if not request.prompt.strip():
+        raise HTTPException(status_code=400, detail="prompt is required")
+
+    anthropic_key = os.environ.get("ANTHROPIC_API_KEY", "").strip()
+    if not anthropic_key:
+        raise HTTPException(status_code=500, detail="ANTHROPIC_API_KEY is not configured")
+
+    results_block = json.dumps(
+        [
+            {
+                "model_id": r.get("model_id"),
+                "latency_ms": r.get("latency_ms"),
+                "prompt_tokens": r.get("prompt_tokens"),
+                "completion_tokens": r.get("completion_tokens"),
+                "total_tokens": r.get("total_tokens"),
+                "error": r.get("error"),
+            }
+            for r in request.results
+        ],
+        indent=2,
+    )
+    judge_block = (
+        json.dumps(request.judge_scores, indent=2)
+        if request.judge_scores
+        else "No judge evaluation was run."
+    )
+
+    user_message = f"""Analyze this benchmark run.
+
+ORIGINAL PROMPT:
+{request.prompt.strip()}
+
+BENCHMARK RESULTS:
+{results_block}
+
+JUDGE SCORES:
+{judge_block}
+
+Use the tools to look up specs and pricing for each model, then write the analysis."""
+
+    client = AsyncAnthropic(api_key=anthropic_key)
+    messages: list = [{"role": "user", "content": user_message}]
+
+    for _ in range(10):
+        response = await client.messages.create(
+            model="claude-sonnet-4-6",
+            max_tokens=2048,
+            system=ANALYST_SYSTEM,
+            tools=ANALYST_TOOLS,
+            messages=messages,
+        )
+
+        if response.stop_reason == "end_turn":
+            text = "".join(
+                block.text for block in response.content if hasattr(block, "text")
+            )
+            return {"analysis": text}
+
+        if response.stop_reason == "tool_use":
+            # Append assistant turn
+            assistant_content = []
+            for block in response.content:
+                if block.type == "text":
+                    assistant_content.append({"type": "text", "text": block.text})
+                elif block.type == "tool_use":
+                    assistant_content.append(
+                        {"type": "tool_use", "id": block.id, "name": block.name, "input": block.input}
+                    )
+            messages.append({"role": "assistant", "content": assistant_content})
+
+            # Execute all tool calls and return results
+            tool_results = []
+            for block in response.content:
+                if block.type == "tool_use":
+                    result = execute_tool(block.name, block.input)
+                    tool_results.append(
+                        {"type": "tool_result", "tool_use_id": block.id, "content": json.dumps(result)}
+                    )
+            messages.append({"role": "user", "content": tool_results})
+        else:
+            break
+
+    raise HTTPException(status_code=500, detail="Analyst agent did not complete")
 
 
 @app.get("/health")
