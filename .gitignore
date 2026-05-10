@@ -1,4 +1,4 @@
-# Environment — never commit the real API key
+# Environment: never commit the real API key
 .env
 
 # Node
@@ -25,3 +25,6 @@ Thumbs.db
 .vscode/
 *.swp
 *.swo
+
+# Planning docs
+PRD*

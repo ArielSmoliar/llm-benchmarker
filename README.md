@@ -138,8 +138,6 @@ npm run dev   # proxies /api/* to http://localhost:8000
 - [x] Streaming responses (token-by-token rendering)
 - [x] Temperature / max_tokens sliders per run
 - [x] Benchmark Analyst: Claude agent with tool use for cost and trade-off analysis
-- [ ] Batch / CSV eval: upload a file of prompts and run them all
-- [ ] SQLite persistence for run history
 
 ---
 
