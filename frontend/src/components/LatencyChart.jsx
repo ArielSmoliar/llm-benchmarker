@@ -1,6 +1,6 @@
 export function TokenChart({ results }) {
   const valid = results.filter((r) => r.completion_tokens != null && r.latency_ms != null)
-  if (valid.length < 2) return null
+  if (valid.length === 0) return null
 
   const sorted = [...valid].sort((a, b) => a.completion_tokens - b.completion_tokens)
   const maxTokens = sorted[sorted.length - 1].completion_tokens
@@ -109,7 +109,7 @@ export function TokenChart({ results }) {
 
 export default function LatencyChart({ results }) {
   const valid = results.filter((r) => r.latency_ms != null && !r.error)
-  if (valid.length < 2) return null
+  if (valid.length === 0) return null
 
   const sorted = [...valid].sort((a, b) => a.latency_ms - b.latency_ms)
   const maxLatency = sorted[sorted.length - 1].latency_ms
